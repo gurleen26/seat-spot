@@ -1,1 +1,13 @@
+
 /build
+
+# Android and Gradle local files
+.gradle/
+**/build/
+local.properties
+
+# Android Studio settings
+.idea/
+
+# Firebase configuration
+google-services.json
