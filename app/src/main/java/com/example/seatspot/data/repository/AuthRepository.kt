@@ -1,4 +1,4 @@
-package com.example.seatspot.data
+package com.example.seatspot.data.repository
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser

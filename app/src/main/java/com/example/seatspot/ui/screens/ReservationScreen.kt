@@ -20,16 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDefaults
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,56 +33,61 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import com.google.firebase.auth.FirebaseAuth
+import com.example.seatspot.network.SeatSpotApi
+import java.text.ParseException
+import androidx.compose.material3.TextButton
 
 private val SeatSpotBlue = Color(0xFF2447A8)
 private val SeatSpotBackground = Color(0xFFF5F7FA)
 private val SeatSpotGreen = Color(0xFF18794E)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReservationScreen(
+    seatId: String,
     seatNumber: Int,
-    onBackClick: () -> Unit,
-    onConfirmClick: (String, String) -> Unit
+    areaId: String,
+    sectionId: String,
+    tableId: String = "",
+    reservationDate: String,
+    startTime: String,
+    endTime: String,
+    resourceType: String = "SEAT",
+    labId: String = "",
+    onBackClick: () -> Unit
 ) {
-    val dateFormatter = remember {
-        SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault()).apply {
+    var isBooking by remember { mutableStateOf(false) }
+    var bookingMessage by remember { mutableStateOf<String?>(null) }
+    var bookingSuccess by remember { mutableStateOf(false) }
+
+    val displayDate = remember(reservationDate) {
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
-        }
+        }.parse(reservationDate)?.let { date ->
+            SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault()).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }.format(date)
+        } ?: reservationDate
     }
 
-    val todayUtcMillis = remember {
-        java.util.Calendar.getInstance(
-            TimeZone.getTimeZone("UTC")
-        ).apply {
-            set(java.util.Calendar.HOUR_OF_DAY, 0)
-            set(java.util.Calendar.MINUTE, 0)
-            set(java.util.Calendar.SECOND, 0)
-            set(java.util.Calendar.MILLISECOND, 0)
-        }.timeInMillis
-    }
+    val validTime = runCatching {
+        val startParts = startTime.split(":")
+        val endParts = endTime.split(":")
 
-    var selectedDateMillis by remember { mutableStateOf<Long?>(null) }
-    var showDatePicker by remember { mutableStateOf(false) }
-    var showTimePicker by remember { mutableStateOf(false) }
-    var choosingStartTime by remember { mutableStateOf(true) }
+        val startMinutes =
+            startParts[0].toInt() * 60 + startParts[1].toInt()
 
-    var startHour by remember { mutableStateOf(9) }
-    var startMinute by remember { mutableStateOf(0) }
-    var endHour by remember { mutableStateOf(11) }
-    var endMinute by remember { mutableStateOf(0) }
+        val endMinutes =
+            endParts[0].toInt() * 60 + endParts[1].toInt()
 
-    val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = selectedDateMillis,
-        selectableDates = object : androidx.compose.material3.SelectableDates {
-            override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                return utcTimeMillis >= todayUtcMillis
-            }
-        }
-    )
+        startMinutes < endMinutes
+    }.getOrDefault(false)
+
+
 
     Column(
         modifier = Modifier
@@ -103,7 +99,11 @@ fun ReservationScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp)
     )  {
         Text(
-            text = "Reserve Your Seat",
+            text = when (resourceType) {
+                "COMPUTER" -> "Reserve Your Computer"
+                "SECOND_FLOOR_SEAT" -> "Reserve Your Table Seat"
+                else -> "Reserve Your Seat"
+            },
             fontSize = 27.sp,
             fontWeight = FontWeight.Bold,
             color = SeatSpotBlue
@@ -138,7 +138,11 @@ fun ReservationScreen(
                     )
                     Spacer(modifier = Modifier.height(5.dp))
                     Text(
-                        text = "Ground Floor",
+                        text = if (resourceType == "COMPUTER") {
+                            "Computer ID: $seatId"
+                        } else {
+                            seatId
+                        },
                         color = Color.White.copy(alpha = 0.85f)
                     )
                 }
@@ -157,21 +161,30 @@ fun ReservationScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "S$seatNumber",
+                            text = if (resourceType == "COMPUTER") {
+                                "PC $seatNumber"
+                            } else {
+                                "S$seatNumber"
+                            },
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color = SeatSpotBlue
                         )
-                        Text("Your seat", fontSize = 11.sp)
+                        Text(
+                            if (resourceType == "COMPUTER") "Your computer" else "Your seat",
+                            fontSize = 11.sp
+                        )
                     }
                 }
             }
         }
 
         // Date selection
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Text(
-                text = "Reservation date",
+                text = "Your study session",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold
             )
@@ -183,82 +196,38 @@ fun ReservationScreen(
                     containerColor = Color.White
                 )
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Study date",
-                            color = Color(0xFF686F7A),
-                            fontSize = 13.sp
-                        )
-                        Spacer(modifier = Modifier.height(5.dp))
-                        Text(
-                            text = selectedDateMillis?.let {
-                                dateFormatter.format(Date(it))
-                            } ?: "No date selected",
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 16.sp
-                        )
-                    }
+                    Text(
+                        text = "RESERVATION DATE",
+                        fontSize = 12.sp,
+                        color = Color(0xFF686F7A)
+                    )
 
-                    OutlinedButton(
-                        onClick = { showDatePicker = true }
-                    ) {
-                        Text("Choose")
-                    }
+                    Text(
+                        text = displayDate,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Text(
+                        text = "STUDY TIMING",
+                        fontSize = 12.sp,
+                        color = Color(0xFF686F7A)
+                    )
+
+                    Text(
+                        text = "$startTime - $endTime",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SeatSpotBlue
+                    )
                 }
             }
         }
 
-        // Time selection
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "Study session",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                TimeCard(
-                    title = "START TIME",
-                    time = String.format(
-                        Locale.ROOT, "%02d:%02d",
-                        startHour, startMinute
-                    ),
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        choosingStartTime = true
-                        showTimePicker = true
-                    }
-                )
-
-                TimeCard(
-                    title = "END TIME",
-                    time = String.format(
-                        Locale.ROOT, "%02d:%02d",
-                        endHour, endMinute
-                    ),
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        choosingStartTime = false
-                        showTimePicker = true
-                    }
-                )
-            }
-
-            Text(
-                text = "Choose a start and end time for your visit.",
-                fontSize = 13.sp,
-                color = Color(0xFF686F7A)
-            )
-        }
 
         // Session summary
         Card(
@@ -274,55 +243,144 @@ fun ReservationScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = SeatSpotGreen
                 )
+
                 Spacer(modifier = Modifier.height(6.dp))
-                Text("Seat S$seatNumber")
+
                 Text(
-                    text = selectedDateMillis?.let {
-                        dateFormatter.format(Date(it))
-                    } ?: "Select a date to continue"
+                    when (resourceType) {
+                        "COMPUTER" -> "Computer PC $seatNumber"
+                        "SECOND_FLOOR_SEAT" ->
+                            "Second Floor • $sectionId • $tableId • Seat S$seatNumber"
+                        else -> "Seat S$seatNumber"
+                    }
                 )
-                Text(
-                    text = String.format(
-                        Locale.ROOT, "%02d:%02d - %02d:%02d",
-                        startHour, startMinute, endHour, endMinute
-                    )
-                )
+                Text(displayDate)
+                Text("$startTime - $endTime")
             }
         }
 
-        val validTime =
-            startHour * 60 + startMinute < endHour * 60 + endMinute
-
         Button(
+
             onClick = {
-                val selectedDate = selectedDateMillis?.let {
-                    SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
-                        timeZone = TimeZone.getTimeZone("UTC")
-                    }.format(Date(it))
+                // Reject past reservations using India local time.
+                val dateTimeFormatter = SimpleDateFormat(
+                    "yyyy-MM-dd HH:mm",
+                    Locale.ROOT
+                ).apply {
+                    timeZone = TimeZone.getTimeZone("Asia/Kolkata")
+                    isLenient = false
                 }
 
-                if (selectedDate != null && validTime) {
-                    val start = String.format(
-                        Locale.ROOT, "%02d:%02d",
-                        startHour, startMinute
-                    )
-                    val end = String.format(
-                        Locale.ROOT, "%02d:%02d",
-                        endHour, endMinute
-                    )
-                    onConfirmClick(selectedDate, "$start-$end")
+                val startDateTime = try {
+                    dateTimeFormatter.parse("$reservationDate $startTime")
+                } catch (e: ParseException) {
+                    null
                 }
+
+                if (
+                    startDateTime == null ||
+                    startDateTime.time <= System.currentTimeMillis()
+                ) {
+                    bookingMessage = "Please choose a future start time."
+                    return@Button
+                }
+
+                val currentUser = FirebaseAuth.getInstance().currentUser
+
+                if (currentUser == null) {
+                    bookingMessage = "Your session has expired. Please sign in again."
+                    return@Button
+                }
+
+                isBooking = true
+                bookingMessage = null
+
+                currentUser.getIdToken(false)
+                    .addOnSuccessListener { tokenResult ->
+
+                        val idToken = tokenResult.token
+
+                        if (idToken.isNullOrBlank()) {
+                            isBooking = false
+                            bookingMessage = "Unable to authenticate your request."
+                            return@addOnSuccessListener
+                        }
+
+                        SeatSpotApi.createReservation(
+                            idToken = idToken,
+                            resourceId = seatId,
+                            floorId = when (resourceType) {
+                                "COMPUTER" -> "first"
+                                "SECOND_FLOOR_SEAT" -> "second"
+                                else -> "ground"
+                            },
+                            areaId = areaId,
+                            sectionId = sectionId,
+                            date = reservationDate,
+                            startTime = startTime,
+                            endTime = endTime,
+                            resourceType = resourceType,
+                            labId = labId,
+                            tableId = tableId
+                        ) { result ->
+
+                            isBooking = false
+
+                            result.onSuccess {
+                                bookingSuccess = true
+                                bookingMessage = when (resourceType) {
+                                    "COMPUTER" -> "Computer reserved successfully!"
+                                    "SECOND_FLOOR_SEAT" -> "Second Floor seat reserved successfully!"
+                                    else -> "Seat reserved successfully!"
+                                }
+                            }
+
+                            result.onFailure { error ->
+                                bookingSuccess = false
+                                bookingMessage = error.localizedMessage
+                                    ?: "Unable to complete reservation."
+                            }
+                        }
+                    }
+                    .addOnFailureListener { error ->
+                        isBooking = false
+                        bookingMessage = error.localizedMessage
+                            ?: "Authentication failed. Please try again."
+                    }
             },
-            enabled = selectedDateMillis != null && validTime,
+            enabled = validTime &&
+                    !isBooking &&
+                    !bookingSuccess,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
             shape = RoundedCornerShape(14.dp)
         ) {
+            if (isBooking) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(
+                    text = if (bookingSuccess) "Reservation Confirmed"
+                    else "Confirm Reservation",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+        bookingMessage?.let { message ->
             Text(
-                text = "Confirm Reservation",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold
+                text = message,
+                color = if (bookingSuccess) {
+                    SeatSpotGreen
+                } else {
+                    Color.Red
+                },
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp
             )
         }
 
@@ -330,137 +388,14 @@ fun ReservationScreen(
             onClick = onBackClick,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Back to Seats")
-        }
-    }
-
-    if (showDatePicker) {
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        selectedDateMillis =
-                            datePickerState.selectedDateMillis
-                        showDatePicker = false
-                    }
-                ) {
-                    Text(
-                        "Select",
-                        color = SeatSpotBlue,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showDatePicker = false }
-                ) {
-                    Text(
-                        "Cancel",
-                        color = SeatSpotBlue
-                    )
-                }
-            }
-        ) {
-
-            DatePicker(
-                state = datePickerState,
-                colors = DatePickerDefaults.colors(
-                    containerColor = Color.White,
-                    titleContentColor = SeatSpotBlue,
-                    headlineContentColor = SeatSpotBlue,
-                    selectedDayContainerColor = SeatSpotBlue,
-                    selectedDayContentColor = Color.White,
-                    todayDateBorderColor = SeatSpotBlue,
-                    todayContentColor = SeatSpotBlue,
-                    selectedYearContainerColor = SeatSpotBlue,
-                    selectedYearContentColor = Color.White
-                )
-            )
-
-        }
-    }
-
-    if (showTimePicker) {
-        val timePickerState = rememberTimePickerState(
-            initialHour = if (choosingStartTime) startHour else endHour,
-            initialMinute = if (choosingStartTime) startMinute else endMinute,
-            is24Hour = true
-        )
-
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showTimePicker = false },
-            title = {
-                Text(
-                    if (choosingStartTime) "Choose start time"
-                    else "Choose end time"
-                )
-            },
-            text = {
-                TimePicker(state = timePickerState)
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (choosingStartTime) {
-                            startHour = timePickerState.hour
-                            startMinute = timePickerState.minute
-                        } else {
-                            endHour = timePickerState.hour
-                            endMinute = timePickerState.minute
-                        }
-                        showTimePicker = false
-                    }
-                ) {
-                    Text("Set time")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTimePicker = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-}
-
-@Composable
-private fun TimeCard(
-    title: String,
-    time: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White
-        ),
-        onClick = onClick
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
             Text(
-                text = title,
-                fontSize = 11.sp,
-                color = Color(0xFF686F7A),
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = time,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = SeatSpotBlue
-            )
-            Text(
-                text = "Tap to change",
-                fontSize = 11.sp,
-                color = Color(0xFF686F7A)
+                if (resourceType == "COMPUTER") {
+                    "Back to Computers"
+                } else {
+                    "Back to Seats"
+                }
             )
         }
     }
 }
+

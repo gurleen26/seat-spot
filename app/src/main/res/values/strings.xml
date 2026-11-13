@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">Seat Spot</string>
+
+    <string name="default_web_client_id">164399474047-2uvgodn1r9co0j9kgvu3q6bkvmhuk6di.apps.googleusercontent.com</string>
+
+
 </resources>
+

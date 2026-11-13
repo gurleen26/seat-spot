@@ -31,14 +31,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.seatspot.data.AuthRepository
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Row
+import com.example.seatspot.data.repository.AuthRepository
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.size
-import androidx.compose.ui.res.painterResource
 import com.example.seatspot.R
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import com.example.seatspot.data.GoogleSignInHelper
 
 @Composable
 fun LoginScreen(
@@ -51,6 +50,9 @@ fun LoginScreen(
     var isLoading by rememberSaveable { mutableStateOf(false) }
 
     val authRepository = AuthRepository()
+
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -156,7 +158,35 @@ fun LoginScreen(
 
         OutlinedButton(
             onClick = {
-                // Google Sign-In will be connected later
+                coroutineScope.launch {
+                    try {
+                        isLoading = true
+                        errorMessage = null
+
+                        GoogleSignInHelper.signIn(context)
+
+                        onLoginClick()
+                    }
+//                    catch (e: Exception) {
+//                        errorMessage = when {
+//                            e.message?.contains("cancel", ignoreCase = true) == true ->
+//                                "Google sign-in was cancelled."
+//                            else ->
+//                                "Google sign-in failed. Please try again."
+//                        }
+//                    }
+                    catch (e: Exception) {
+                        android.util.Log.e(
+                            "SeatSpotGoogle",
+                            "Google sign-in failed",
+                            e
+                        )
+
+                        errorMessage = "${e::class.simpleName}: ${e.message}"
+                    }finally {
+                        isLoading = false
+                    }
+                }
             },
             modifier = Modifier.fillMaxWidth()
         ) {
