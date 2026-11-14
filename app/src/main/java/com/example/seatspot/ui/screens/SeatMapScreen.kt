@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chair
@@ -53,13 +55,27 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.CalendarMonth
 
 private val PrimaryBlue = Color(0xFF2447A8)
 private val BackgroundColor = Color(0xFFF3F6FC)
 private val CardColor = Color.White
-private val AvailableColor = Color(0xFFC8F2D5)
-private val InactiveColor = Color(0xFFF7C7C7)
-private val SelectedColor = Color(0xFFB9C9FF)
+
+private val AvailableColor = Color(0xFFE0F5E8)
+private val ReservedColor = Color(0xFFFFE2E2)
+private val InactiveColor = Color(0xFFE5E7EB)
+private val SelectedColor = Color(0xFFDCE6FF)
 
 private data class FloorOption(
     val id: String,
@@ -84,9 +100,11 @@ fun SeatMapScreen(
 
     var startHour by remember { mutableStateOf(9) }
     var startMinute by remember { mutableStateOf(0) }
+    var hasSelectedStartTime by remember { mutableStateOf(false) }
 
     var endHour by remember { mutableStateOf(11) }
     var endMinute by remember { mutableStateOf(0) }
+    var hasSelectedEndTime by remember { mutableStateOf(false) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -119,9 +137,38 @@ fun SeatMapScreen(
     var showTables by remember { mutableStateOf(false) }
 
     var isLoading by remember { mutableStateOf(false) }
+    var isAvailabilityLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val repository = remember { FirestoreRepository() }
+
+    // Clear all floor/area/seat selections whenever the date or time changes.
+    fun resetLocationSelection() {
+        selectedFloor = null
+        selectedArea = null
+        selectedSection = null
+        selectedSeat = null
+        selectedComputer = null
+        selectedTable = null
+
+        areas = emptyList()
+        sections = emptyList()
+        seats = emptyList()
+        computers = emptyList()
+        tables = emptyList()
+        reservedSeats = emptyMap()
+
+        showAreas = false
+        showSections = false
+        showSeats = false
+        showComputers = false
+        showTables = false
+
+        isLoading = false
+        isAvailabilityLoading = false
+        errorMessage = null
+    }
+
     fun loadSeatAvailability() {
 
 //****************
@@ -138,6 +185,15 @@ fun SeatMapScreen(
         val areaId = selectedArea ?: return
         val sectionId = selectedSection ?: return
 
+        isAvailabilityLoading = true
+        errorMessage = null
+
+        if (user == null) {
+            isAvailabilityLoading = false
+            errorMessage = "Please sign in to check availability."
+            return
+        }
+
         val reservationDate = SimpleDateFormat(
             "yyyy-MM-dd",
             Locale.US
@@ -147,7 +203,11 @@ fun SeatMapScreen(
 
         user?.getIdToken(false)?.addOnSuccessListener { tokenResult ->
 
-            val token = tokenResult.token ?: return@addOnSuccessListener
+            val token = tokenResult.token ?: run {
+                isAvailabilityLoading = false
+                errorMessage = "Authentication token unavailable."
+                return@addOnSuccessListener
+            }
 
 //            *********************
             android.util.Log.d(
@@ -203,8 +263,10 @@ fun SeatMapScreen(
                         }
 
                         reservedSeats = availability
+                        isAvailabilityLoading = false
 
                     } catch (e: Exception) {
+                        isAvailabilityLoading = false
                         errorMessage = "Unable to process seat availability."
                     }
                 }
@@ -217,12 +279,13 @@ fun SeatMapScreen(
                         "API Error",
                         exception
                     )
-
+                    isAvailabilityLoading = false
                     errorMessage = exception.localizedMessage
                         ?: "Unable to load seat availability."
                 }
             }
         }?.addOnFailureListener {
+            isAvailabilityLoading = false
             errorMessage = "Unable to authenticate availability request."
         }
     }
@@ -234,6 +297,14 @@ fun SeatMapScreen(
 
         val dateMillis = selectedDateMillis ?: return
         val labId = selectedArea ?: return
+        isAvailabilityLoading = true
+        errorMessage = null
+
+        if (user == null) {
+            isAvailabilityLoading = false
+            errorMessage = "Please sign in to check availability."
+            return
+        }
 
         val reservationDate = SimpleDateFormat(
             "yyyy-MM-dd",
@@ -244,7 +315,11 @@ fun SeatMapScreen(
 
         user?.getIdToken(false)?.addOnSuccessListener { tokenResult ->
 
-            val token = tokenResult.token ?: return@addOnSuccessListener
+            val token = tokenResult.token ?: run {
+                isAvailabilityLoading = false
+                errorMessage = "Authentication token unavailable."
+                return@addOnSuccessListener
+            }
 
             com.example.seatspot.network.SeatSpotApi.getSeatAvailability(
                 idToken = token,
@@ -289,13 +364,16 @@ fun SeatMapScreen(
                         }
 
                         reservedSeats = availability
+                        isAvailabilityLoading = false
 
                     } catch (e: Exception) {
+                        isAvailabilityLoading = false
                         errorMessage = "Unable to process computer availability."
                     }
                 }
 
                 result.onFailure { exception ->
+                    isAvailabilityLoading = false
                     android.util.Log.e(
                         "SeatSpotAvailability",
                         "Computer availability API error",
@@ -307,6 +385,7 @@ fun SeatMapScreen(
                 }
             }
         }?.addOnFailureListener {
+            isAvailabilityLoading = false
             errorMessage = "Unable to authenticate computer availability request."
         }
     }
@@ -320,6 +399,14 @@ fun SeatMapScreen(
         val dateMillis = selectedDateMillis ?: return
         val sectionId = selectedArea ?: return
         val tableId = selectedTable ?: return
+        isAvailabilityLoading = true
+        errorMessage = null
+
+        if (user == null) {
+            isAvailabilityLoading = false
+            errorMessage = "Please sign in to check availability."
+            return
+        }
 
         val reservationDate = SimpleDateFormat(
             "yyyy-MM-dd",
@@ -330,7 +417,11 @@ fun SeatMapScreen(
 
         user?.getIdToken(false)?.addOnSuccessListener { tokenResult ->
 
-            val token = tokenResult.token ?: return@addOnSuccessListener
+            val token = tokenResult.token ?: run {
+                isAvailabilityLoading = false
+                errorMessage = "Authentication token unavailable."
+                return@addOnSuccessListener
+            }
 
             com.example.seatspot.network.SeatSpotApi.getSeatAvailability(
                 idToken = token,
@@ -376,13 +467,16 @@ fun SeatMapScreen(
                         }
 
                         reservedSeats = availability
-
+                        isAvailabilityLoading = false
                     } catch (e: Exception) {
+                        isAvailabilityLoading = false
                         errorMessage = "Unable to process Second Floor availability."
                     }
                 }
 
                 result.onFailure { exception ->
+                    isAvailabilityLoading = false
+
                     android.util.Log.e(
                         "SeatSpotAvailability",
                         "Second Floor availability API error",
@@ -394,6 +488,7 @@ fun SeatMapScreen(
                 }
             }
         }?.addOnFailureListener {
+            isAvailabilityLoading = false
             errorMessage = "Unable to authenticate Second Floor availability request."
         }
     }
@@ -439,6 +534,7 @@ fun SeatMapScreen(
             }
 
             else -> {
+                isAvailabilityLoading = false
                 reservedSeats = emptyMap()
             }
         }
@@ -479,7 +575,11 @@ fun SeatMapScreen(
     }
 
     val validSession =
-        selectedDateMillis != null && validTime && isFutureTime
+        selectedDateMillis != null &&
+                hasSelectedStartTime &&
+                hasSelectedEndTime &&
+                validTime &&
+                isFutureTime
 
     val floors = listOf(
         FloorOption(
@@ -506,6 +606,7 @@ fun SeatMapScreen(
     )
 
     val screenTitle = when {
+        !validSession -> "Plan Your Study Session"
         showSeats -> "Choose Your Seat"
         showComputers -> "Choose Your Computer"
         showTables -> "Select a Table"
@@ -515,6 +616,139 @@ fun SeatMapScreen(
         showAreas -> "Select an Area"
         else -> "Select a Floor"
     }
+
+
+    fun retryCurrentStep() {
+        errorMessage = null
+        isLoading = true
+
+        when {
+            // Retry loading seats on Second Floor
+            showTables && selectedTable != null &&
+                    selectedFloor == "second" -> {
+                repository.getSecondFloorSeats(
+                    sectionId = selectedArea!!,
+                    tableId = selectedTable!!
+                ) { result ->
+                    result.onSuccess {
+                        seats = it
+                        showSeats = true
+                        selectedSeat = null
+                    }
+                    result.onFailure {
+                        errorMessage = it.localizedMessage
+                            ?: "Unable to load seats."
+                    }
+                    isLoading = false
+                }
+            }
+
+            // Retry loading tables
+            showAreas && selectedArea != null &&
+                    selectedFloor == "second" && !showTables -> {
+                repository.getSecondFloorTables(selectedArea!!) { result ->
+                    result.onSuccess { tables = it }
+                    result.onFailure {
+                        errorMessage = it.localizedMessage
+                            ?: "Unable to load tables."
+                    }
+                    isLoading = false
+                }
+            }
+
+            // Retry loading Ground Floor seats
+            showSections && selectedSection != null &&
+                    selectedFloor == "ground" -> {
+                repository.getGroundFloorSeats(
+                    areaId = selectedArea!!,
+                    sectionId = selectedSection!!
+                ) { result ->
+                    result.onSuccess {
+                        seats = it
+                        showSeats = true
+                        selectedSeat = null
+                    }
+                    result.onFailure {
+                        errorMessage = it.localizedMessage
+                            ?: "Unable to load seats."
+                    }
+                    isLoading = false
+                }
+            }
+
+            // Retry loading Ground Floor sections
+            showAreas && selectedArea != null &&
+                    selectedFloor == "ground" && !showSections -> {
+                repository.getGroundFloorSections(selectedArea!!) { result ->
+                    result.onSuccess { sections = it }
+                    result.onFailure {
+                        errorMessage = it.localizedMessage
+                            ?: "Unable to load sections."
+                    }
+                    isLoading = false
+                }
+            }
+
+            // Retry loading First Floor computers
+            showAreas && selectedArea != null &&
+                    selectedFloor == "first" && !showComputers -> {
+                repository.getFirstFloorComputers(selectedArea!!) { result ->
+                    result.onSuccess {
+                        computers = it
+                        showComputers = true
+                        selectedComputer = null
+                    }
+                    result.onFailure {
+                        errorMessage = it.localizedMessage
+                            ?: "Unable to load computers."
+                    }
+                    isLoading = false
+                }
+            }
+
+            // Retry loading areas
+            selectedFloor == "ground" && !showAreas -> {
+                repository.getGroundFloorAreas { result ->
+                    result.onSuccess { areas = it }
+                    result.onFailure {
+                        errorMessage = it.localizedMessage
+                            ?: "Unable to load areas."
+                    }
+                    isLoading = false
+                }
+            }
+
+            // Retry loading labs
+            selectedFloor == "first" && !showAreas -> {
+                repository.getFirstFloorLabs { result ->
+                    result.onSuccess { areas = it }
+                    result.onFailure {
+                        errorMessage = it.localizedMessage
+                            ?: "Unable to load labs."
+                    }
+                    isLoading = false
+                }
+            }
+
+            // Retry loading Second Floor sections
+            selectedFloor == "second" && !showAreas -> {
+                repository.getSecondFloorSections { result ->
+                    result.onSuccess { areas = it }
+                    result.onFailure {
+                        errorMessage = it.localizedMessage
+                            ?: "Unable to load sections."
+                    }
+                    isLoading = false
+                }
+            }
+
+            else -> {
+                isLoading = false
+                errorMessage = "Unable to retry this operation."
+            }
+        }
+    }
+
 
     fun goBack() {
         when {
@@ -558,155 +792,283 @@ fun SeatMapScreen(
             .background(BackgroundColor)
     ) {
 
+        SeatMapHeader(
+            onBackClick = { goBack() }
+        )
+
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(20.dp)
+                .padding(horizontal = 20.dp)
+                .padding(top = 16.dp)
         ) {
-            Text(
-                text = "Choose Your Space",
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                color = PrimaryBlue
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Central Library",
-                color = Color.Gray,
-                fontSize = 15.sp
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
 
             // RESERVATION DATE AND TIME SELECTION
 
-            Text(
-                text = "Select Your Study Session",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = PrimaryBlue
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-// Date selection
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showDatePicker = true },
-                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = CardColor
+                    containerColor = Color.White
+                ),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = 3.dp
                 )
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "RESERVATION DATE",
-                        fontSize = 11.sp,
-                        color = Color.Gray,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    Spacer(modifier = Modifier.height(5.dp))
-
-                    Text(
-                        text = selectedDateMillis?.let {
-                            dateFormatter.format(Date(it))
-                        } ?: "Choose your study date",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = PrimaryBlue
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Start and end time selection
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            choosingStartTime = true
-                            showTimePicker = true
-                        },
-                    colors = CardDefaults.cardColors(containerColor = CardColor),
-                    shape = RoundedCornerShape(14.dp)
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text("START TIME", fontSize = 11.sp, color = Color.Gray)
-                        Spacer(modifier = Modifier.height(5.dp))
+
+                    // CARD TITLE
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFFDDF7F2)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = "Study session calendar",
+                                tint = Color(0xFF159F91),
+                                modifier = Modifier.size(25.dp)
+                            )
+                        }
+
                         Text(
-                            String.format(
-                                Locale.ROOT,
-                                "%02d:%02d",
-                                startHour,
-                                startMinute
-                            ),
-                            fontSize = 21.sp,
+                            text = "Select Your Study Session",
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color = PrimaryBlue
+                            color = Color(0xFF172B67)
+                        )
+                    }
+
+                    // DATE SELECTION
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showDatePicker = true
+                            },
+                        shape = RoundedCornerShape(17.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFF1F5FC)
+                        ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 0.dp
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(4.dp)
+                                    .height(43.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF20B6A6))
+                            )
+
+                            Spacer(modifier = Modifier.width(14.dp))
+
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "Reservation date",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                    text = selectedDateMillis?.let {
+                                        dateFormatter.format(Date(it))
+                                    } ?: "Choose your study date",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = PrimaryBlue
+                                )
+                            }
+
+                            Text(
+                                text = "▦",
+                                fontSize = 24.sp,
+                                color = PrimaryBlue
+                            )
+                        }
+                    }
+
+                    // START AND END TIME
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+
+                        // START TIME
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable(enabled = selectedDateMillis != null) {
+                                    choosingStartTime = true
+                                    showTimePicker = true
+                                },
+                            shape = RoundedCornerShape(17.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFF1F5FC)
+                            ),
+                            elevation = CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(15.dp)
+                            ) {
+                                Text(
+                                    text = "Start time",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+
+                                Spacer(modifier = Modifier.height(5.dp))
+
+                                Text(
+                                    text = if (hasSelectedStartTime) {
+                                        String.format(
+                                            Locale.ROOT,
+                                            "%02d:%02d",
+                                            startHour,
+                                            startMinute
+                                        )
+                                    } else {
+                                        "Choose time"
+                                    },
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (hasSelectedStartTime)
+                                        Color(0xFF172B67) else Color.Gray
+                                )
+                            }
+                        }
+
+                        // END TIME
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable(
+                                    enabled = selectedDateMillis != null && hasSelectedStartTime
+                                ) {
+                                    choosingStartTime = false
+                                    showTimePicker = true
+                                },
+                            shape = RoundedCornerShape(17.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFF1F5FC)
+                            ),
+                            elevation = CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(15.dp)
+                            ) {
+                                Text(
+                                    text = "End time",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+
+                                Spacer(modifier = Modifier.height(5.dp))
+
+                                Text(
+                                    text = if (hasSelectedEndTime) {
+                                        String.format(
+                                            Locale.ROOT,
+                                            "%02d:%02d",
+                                            endHour,
+                                            endMinute
+                                        )
+                                    } else {
+                                        "Choose time"
+                                    },
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (hasSelectedEndTime)
+                                        Color(0xFF172B67) else Color.Gray
+                                )
+                            }
+                        }
+                    }
+
+                    // SESSION VALIDATION MESSAGE
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                when {
+                                    validSession -> Color(0xFFE3F7EF)
+                                    selectedDateMillis == null -> Color(0xFFEAF1FF)
+                                    else -> Color(0xFFFFF4E5)
+                                }
+                            )
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (validSession) "✓" else "ⓘ",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = when {
+                                validSession -> Color(0xFF00876C)
+                                selectedDateMillis == null -> PrimaryBlue
+                                else -> Color(0xFFB7791F)
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Text(
+                            text = when {
+                                selectedDateMillis == null ->
+                                    "Step 1 of 3: Select your reservation date."
+
+                                !hasSelectedStartTime ->
+                                    "Step 2 of 3: Choose your start time."
+
+                                !hasSelectedEndTime ->
+                                    "Now choose your end time to complete your study session."
+
+                                !validTime ->
+                                    "End time must be later than start time."
+
+                                !isFutureTime ->
+                                    "Please select a future start time."
+
+                                else ->
+                                    "Study session selected. You can now choose a floor."
+                            },
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                            color = when {
+                                validSession -> Color(0xFF087F65)
+                                selectedDateMillis == null -> Color(0xFF2447A8)
+                                else -> Color(0xFF946200)
+                            }
                         )
                     }
                 }
-
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            choosingStartTime = false
-                            showTimePicker = true
-                        },
-                    colors = CardDefaults.cardColors(containerColor = CardColor),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text("END TIME", fontSize = 11.sp, color = Color.Gray)
-                        Spacer(modifier = Modifier.height(5.dp))
-                        Text(
-                            String.format(
-                                Locale.ROOT,
-                                "%02d:%02d",
-                                endHour,
-                                endMinute
-                            ),
-                            fontSize = 21.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryBlue
-                        )
-                    }
-                }
             }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = when {
-                    selectedDateMillis == null ->
-                        "Please select a reservation date."
-
-                    !validTime ->
-                        "End time must be later than start time."
-
-                    !isFutureTime ->
-                        "Please select a future start time."
-
-                    else ->
-                        "Availability will be checked for your selected session."
-                },
-                color = if (validSession) Color.Gray else Color(0xFFD32F2F)
-            )
 
             Spacer(modifier = Modifier.height(20.dp))
-
 
             Text(
                 text = screenTitle,
@@ -752,13 +1114,101 @@ fun SeatMapScreen(
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(
-                    if (showSeats || showComputers) 4 else 2
+                    if (showSeats || showComputers) 4 else 1
                 ),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.weight(1f)
             ) {
                 when {
+                    !validSession -> {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color.White
+                                ),
+                                elevation = CardDefaults.cardElevation(
+                                    defaultElevation = 1.dp
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(22.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarMonth,
+                                        contentDescription = null,
+                                        tint = PrimaryBlue,
+                                        modifier = Modifier.size(34.dp)
+                                    )
+                                    Text(
+                                        text = "Complete your study session first",
+                                        color = Color(0xFF172B67),
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Select a date, then choose your start and end times. Floor options will appear after your session is valid.",
+                                        color = Color(0xFF64748B),
+                                        fontSize = 12.sp,
+                                        lineHeight = 18.sp,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    isAvailabilityLoading && (showSeats || showComputers) -> {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(30.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    color = PrimaryBlue
+                                )
+
+                                Text(
+                                    text = "Checking availability...",
+                                    color = PrimaryBlue,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+
+                            }
+                        }
+                    }
+                    // EMPTY STATE: NO SEATS
+                    showSeats && seats.isEmpty() -> {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            AvailabilityEmptyState(
+                                title = "No seats found",
+                                message = "There are currently no seats listed in this section. Please try another section."
+                            )
+                        }
+                    }
+
+// EMPTY STATE: NO COMPUTERS
+                    showComputers && computers.isEmpty() -> {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            AvailabilityEmptyState(
+                                title = "No computers found",
+                                message = "There are currently no computers listed in this lab. Please try another lab."
+                            )
+                        }
+                    }
+
                     // GROUND FLOOR SEATS
                     showSeats -> {
                         items(
@@ -835,10 +1285,10 @@ fun SeatMapScreen(
                                 }.timeInMillis
                             } ?: 0L
 
-                            val isReserved = reservedSeats[computer.computerId]?.any {
-                                    (start, end) ->
-                                selectedStart < end && selectedEnd > start
-                            } == true
+                            val isReserved =
+                                reservedSeats[computer.computerId]?.any { (start, end) ->
+                                    selectedStart < end && selectedEnd > start
+                                } == true
 
                             ComputerCard(
                                 computer = computer,
@@ -887,7 +1337,15 @@ fun SeatMapScreen(
                         items(areas) { area ->
                             SelectionCard(
                                 title = area.replace("_", " ")
-                                    .replaceFirstChar { it.uppercase() },
+                                    .split(" ")
+                                    .mapIndexed { index, part ->
+                                        if (index == 0) {
+                                            part.replaceFirstChar { it.uppercase() }
+                                        } else {
+                                            part.uppercase()
+                                        }
+                                    }
+                                    .joinToString(" "),
                                 subtitle = when (selectedFloor) {
                                     "first" -> "30 Computers"
                                     "second" -> "2 Tables"
@@ -908,25 +1366,8 @@ fun SeatMapScreen(
                                 floor = floor,
                                 isSelected = selectedFloor == floor.id,
                                 onClick = {
+                                    resetLocationSelection()
                                     selectedFloor = floor.id
-                                    errorMessage = null
-                                }
-                            )
-                        }
-
-                        item {
-                            FloorCard(
-                                floor = FloorOption(
-                                    id = "rooms",
-                                    title = "Discussion Rooms",
-                                    description = "Private study rooms",
-                                    resourceCount = 2,
-                                    resourceType = "Rooms"
-                                ),
-                                isSelected = selectedFloor == "rooms",
-                                onClick = {
-                                    selectedFloor = "rooms"
-                                    errorMessage = null
                                 }
                             )
                         }
@@ -935,29 +1376,30 @@ fun SeatMapScreen(
             }
 
 
-
             // GROUND FLOOR SEAT SELECTION
-            if (showSeats) {
+            if (showSeats || showComputers) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    LegendItem(AvailableColor, "Active")
+                    LegendItem(AvailableColor, "Available")
+                    LegendItem(ReservedColor, "Reserved")
                     LegendItem(InactiveColor, "Inactive")
                     LegendItem(SelectedColor, "Selected")
                 }
-
-                Text(
-                    text = selectedSeat?.let {
-                        "Selected seat: ${it.seatId}"
-                    } ?: "Select an active seat.",
-                    color = PrimaryBlue,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(bottom = 10.dp)
-                )
+                if (showSeats) {
+                    Text(
+                        text = selectedSeat?.let {
+                            "Selected seat: ${it.seatId}"
+                        } ?: "Select an available seat.",
+                        color = PrimaryBlue,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    )
+                }
 
                 Button(
                     onClick = {
@@ -1025,9 +1467,20 @@ fun SeatMapScreen(
                         }
                     },
                     enabled = selectedSeat != null && validSession,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF172B67),
+                        disabledContainerColor = Color(0xFFB8C1D6)
+                    )
                 ) {
-                    Text("Continue to Reserve")
+                    Text(
+                        text = "Continue to Reserve  →",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
@@ -1089,21 +1542,33 @@ fun SeatMapScreen(
                         }
                     },
                     enabled = selectedComputer != null && validSession,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF172B67),
+                        disabledContainerColor = Color(0xFFB8C1D6)
+                    )
                 ) {
-                    Text("Continue to Reserve")
+                    Text(
+                        text = "Continue to Reserve  →",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
 
             // FLOOR / AREA / SECTION / LAB CONTINUE BUTTON
-            else {
+            else if (validSession) {
                 Button(
                     onClick = {
                         errorMessage = null
                         isLoading = true
 
                         when {
+
                             // GROUND FLOOR: LOAD AREAS
                             !showAreas && selectedFloor == "ground" -> {
                                 repository.getGroundFloorAreas { result ->
@@ -1173,10 +1638,7 @@ fun SeatMapScreen(
                                         showComputers = true
                                         selectedComputer = null
 
-                                        if (fetchedComputers.isEmpty()) {
-                                            errorMessage =
-                                                "No computers found in this lab."
-                                        }
+
                                     }
 
                                     result.onFailure { exception ->
@@ -1249,9 +1711,6 @@ fun SeatMapScreen(
                                         showSeats = true
                                         selectedSeat = null
 
-                                        if (fetchedSeats.isEmpty()) {
-                                            errorMessage = "No seats found at this table."
-                                        }
                                     }
 
                                     result.onFailure { exception ->
@@ -1278,18 +1737,12 @@ fun SeatMapScreen(
                                         seats = fetchedSeats
                                         showSeats = true
                                         selectedSeat = null
-
-
-                                        if (fetchedSeats.isEmpty()) {
-                                            errorMessage = "No seats found in this section."
-                                        }
                                     }
 
                                     result.onFailure { exception ->
                                         errorMessage = exception.localizedMessage
                                             ?: "Unable to load seats."
                                     }
-
                                     isLoading = false
                                 }
                             }
@@ -1315,24 +1768,78 @@ fun SeatMapScreen(
                                             selectedFloor == "second" &&
                                             selectedTable != null)
                             ),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = PrimaryBlue,
+                        contentColor = Color.White,
+                        disabledContainerColor = Color(0xFFDCE6F7),
+                        disabledContentColor = Color(0xFF8492AD)
+                    )
                 ) {
                     Text(if (isLoading) "Loading..." else "Continue")
                 }
             }
 
+
             errorMessage?.let { message ->
-                Text(
-                    text = message,
-                    color = Color.Red,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFFFEEEE)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Something went wrong",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFB42318)
+                        )
+
+                        Text(
+                            text = message,
+                            fontSize = 13.sp,
+                            color = Color(0xFF7F1D1D)
+                        )
+
+                        Button(
+                            onClick = {
+                                if (showSeats || showComputers) {
+                                    when {
+                                        showComputers -> loadComputerAvailability()
+                                        selectedFloor == "second" ->
+                                            loadSecondFloorAvailability()
+
+                                        showSeats -> loadSeatAvailability()
+                                    }
+                                } else {
+                                    retryCurrentStep()
+                                }
+                            },
+                            enabled = !isAvailabilityLoading && !isLoading
+                        ) {
+                            Text(
+                                if (isAvailabilityLoading || isLoading) "Retrying..."
+                                else "Try Again"
+                            )
+                        }
+                    }
+                }
             }
+
 
             TextButton(
                 onClick = { goBack() },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                    contentColor = PrimaryBlue
+                )
             ) {
                 Text(
                     text = when {
@@ -1342,7 +1849,9 @@ fun SeatMapScreen(
                         showSections -> "Back to Areas"
                         showAreas -> "Back to Floors"
                         else -> "Back to Home"
-                    }
+                    },
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp
                 )
             }
         }
@@ -1383,8 +1892,21 @@ fun SeatMapScreen(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            selectedDateMillis =
-                                datePickerState.selectedDateMillis
+                            val newDate = datePickerState.selectedDateMillis
+
+                            if (newDate != selectedDateMillis) {
+                                resetLocationSelection()
+                                selectedDateMillis = newDate
+
+                                startHour = 9
+                                startMinute = 0
+                                hasSelectedStartTime = false
+
+                                endHour = 11
+                                endMinute = 0
+                                hasSelectedEndTime = false
+                            }
+
                             showDatePicker = false
                         }
                     ) {
@@ -1433,11 +1955,16 @@ fun SeatMapScreen(
                     TextButton(
                         onClick = {
                             if (choosingStartTime) {
+                                resetLocationSelection()
                                 startHour = timePickerState.hour
                                 startMinute = timePickerState.minute
+                                hasSelectedStartTime = true
+                                hasSelectedEndTime = false
                             } else {
+                                resetLocationSelection()
                                 endHour = timePickerState.hour
                                 endMinute = timePickerState.minute
+                                hasSelectedEndTime = true
                             }
 
                             showTimePicker = false
@@ -1460,6 +1987,7 @@ fun SeatMapScreen(
     }
 }
 
+
 @Composable
 private fun SeatCard(
     seat: Seat,
@@ -1469,47 +1997,80 @@ private fun SeatCard(
 ) {
     val seatColor = when {
         !seat.isActive -> InactiveColor
+        isReserved -> ReservedColor
         isSelected -> SelectedColor
-        isReserved -> InactiveColor
         else -> AvailableColor
+    }
+
+    val status = when {
+        !seat.isActive -> "Inactive"
+        isReserved -> "Reserved"
+        isSelected -> "Selected"
+        else -> "Available"
+    }
+
+    val statusColor = when {
+        !seat.isActive -> Color(0xFF6B7280)
+        isReserved -> Color(0xFFCC4242)
+        isSelected -> PrimaryBlue
+        else -> Color(0xFF16845D)
     }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(76.dp)
+            .height(88.dp)
             .clickable(
                 enabled = seat.isActive && !isReserved,
                 onClick = onClick
             ),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = seatColor
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = when {
+                isSelected -> PrimaryBlue
+                isReserved -> Color(0xFFF3B5B5)
+                !seat.isActive -> Color(0xFFD1D5DB)
+                else -> Color(0xFFB9E5C9)
+            }
         )
     ) {
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            Icon(
+                imageVector = Icons.Default.Chair,
+                contentDescription = "Seat",
+                tint = statusColor,
+                modifier = Modifier.size(25.dp)
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
             Text(
                 text = "S${seat.seatNumber}",
                 fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
+                fontSize = 13.sp,
+                color = Color(0xFF172B67)
             )
 
             Text(
-                text = when {
-                    !seat.isActive -> "Inactive"
-                    isReserved -> "Reserved"
-                    isSelected -> "Selected"
-                    else -> "Available"
-                },
-                fontSize = 10.sp
+                text = status,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Medium,
+                color = statusColor
             )
         }
     }
 }
+
 
 @Composable
 private fun ComputerCard(
@@ -1520,56 +2081,80 @@ private fun ComputerCard(
 ) {
     val computerColor = when {
         !computer.isActive -> InactiveColor
-        isReserved -> InactiveColor
+        isReserved -> ReservedColor
         isSelected -> SelectedColor
         else -> AvailableColor
+    }
+
+    val status = when {
+        !computer.isActive -> "Inactive"
+        isReserved -> "Reserved"
+        isSelected -> "Selected"
+        else -> "Available"
+    }
+
+    val statusColor = when {
+        !computer.isActive -> Color(0xFF6B7280)
+        isReserved -> Color(0xFFCC4242)
+        isSelected -> PrimaryBlue
+        else -> Color(0xFF16845D)
     }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(82.dp)
+            .height(88.dp)
             .clickable(
                 enabled = computer.isActive && !isReserved,
                 onClick = onClick
             ),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = computerColor
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = when {
+                isSelected -> PrimaryBlue
+                isReserved -> Color(0xFFF3B5B5)
+                !computer.isActive -> Color(0xFFD1D5DB)
+                else -> Color(0xFFB9E5C9)
+            }
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(4.dp),
+                .padding(5.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Monitor,
                 contentDescription = "Computer",
-                tint = PrimaryBlue,
-                modifier = Modifier.size(22.dp)
+                tint = statusColor,
+                modifier = Modifier.size(25.dp)
             )
+
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = "PC ${computer.computerNumber}",
                 fontWeight = FontWeight.Bold,
-                fontSize = 12.sp
+                fontSize = 12.sp,
+                color = Color(0xFF172B67)
             )
 
             Text(
-                text = when {
-                    !computer.isActive -> "Inactive"
-                    isReserved -> "Reserved"
-                    isSelected -> "Selected"
-                    else -> "Available"
-                },
-                fontSize = 9.sp
+                text = status,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Medium,
+                color = statusColor
             )
         }
     }
 }
+
 
 @Composable
 private fun LegendItem(
@@ -1593,6 +2178,8 @@ private fun LegendItem(
     }
 }
 
+
+
 @Composable
 private fun SelectionCard(
     title: String,
@@ -1600,46 +2187,92 @@ private fun SelectionCard(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val teal = Color(0xFF20B6A6)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(125.dp)
+            .height(105.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                Color(0xFFE0E9FF)
-            } else {
-                CardColor
-            }
+            containerColor = if (isSelected)
+                Color(0xFFE8EEFF)
+            else
+                Color.White
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected)
+                PrimaryBlue
+            else
+                Color(0xFFE5EAF3)
         ),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
+            defaultElevation = if (isSelected) 4.dp else 2.dp
         )
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = title,
-                fontWeight = FontWeight.Bold,
-                color = PrimaryBlue,
-                fontSize = 16.sp
-            )
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        if (isSelected)
+                            Color(0xFFD5E1FF)
+                        else
+                            Color(0xFFDDF7F2)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Layers,
+                    contentDescription = null,
+                    tint = if (isSelected) PrimaryBlue else teal,
+                    modifier = Modifier.size(25.dp)
+                )
+            }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.width(16.dp))
 
-            Text(
-                text = subtitle,
-                color = Color.Gray,
-                fontSize = 12.sp
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF172B67)
+                )
+
+                Spacer(modifier = Modifier.height(5.dp))
+
+                Text(
+                    text = subtitle,
+                    fontSize = 12.sp,
+                    color = Color(0xFF64748B)
+                )
+            }
+
+            Icon(
+                imageVector = if (isSelected)
+                    Icons.Default.CheckCircle
+                else
+                    Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = if (isSelected) PrimaryBlue else Color.Gray,
+                modifier = Modifier.size(24.dp)
             )
         }
     }
 }
+
 
 @Composable
 private fun FloorCard(
@@ -1647,18 +2280,126 @@ private fun FloorCard(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val navy = Color(0xFF172B67)
+    val teal = Color(0xFF20B6A6)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(185.dp)
+            .height(125.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                Color(0xFFE0E9FF)
-            } else {
-                CardColor
+            containerColor = if (isSelected)
+                Color(0xFFE8EEFF)
+            else
+                Color.White
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected)
+                PrimaryBlue
+            else
+                Color(0xFFE5EAF3)
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isSelected) 4.dp else 2.dp
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(58.dp)
+                    .clip(RoundedCornerShape(17.dp))
+                    .background(
+                        if (isSelected)
+                            Color(0xFFD5E1FF)
+                        else
+                            Color(0xFFDDF7F2)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = when (floor.id) {
+                        "ground" -> Icons.Default.Chair
+                        "first" -> Icons.Default.Monitor
+                        "second" -> Icons.Default.Layers
+                        else -> Icons.Default.MeetingRoom
+                    },
+                    contentDescription = floor.title,
+                    tint = if (isSelected) PrimaryBlue else teal,
+                    modifier = Modifier.size(30.dp)
+                )
             }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = floor.title,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = navy
+                )
+
+                Spacer(modifier = Modifier.height(5.dp))
+
+                Text(
+                    text = floor.description,
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+
+                Spacer(modifier = Modifier.height(5.dp))
+
+                Text(
+                    text = "${floor.resourceCount} ${floor.resourceType}",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = PrimaryBlue
+                )
+            }
+
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Selected",
+                    tint = PrimaryBlue,
+                    modifier = Modifier.size(25.dp)
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Select floor",
+                    tint = Color.Gray,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun AvailabilityEmptyState(
+    title: String,
+    message: String
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 2.dp
@@ -1666,47 +2407,120 @@ private fun FloorCard(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Icon(
-                imageVector = when (floor.id) {
-                    "ground" -> Icons.Default.Chair
-                    "first" -> Icons.Default.Monitor
-                    "second" -> Icons.Default.Layers
-                    else -> Icons.Default.MeetingRoom
-                },
+                imageVector = Icons.Default.MeetingRoom,
                 contentDescription = null,
-                tint = PrimaryBlue,
-                modifier = Modifier.size(30.dp)
+                tint = Color(0xFF20B6A6),
+                modifier = Modifier.size(42.dp)
             )
 
-            Column {
-                Text(
-                    text = floor.title,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = Color(0xFF172554)
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF172B67)
+            )
+
+            Text(
+                text = message,
+                fontSize = 13.sp,
+                color = Color(0xFF64748B),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
+}
+
+
+@Composable
+private fun SeatMapHeader(
+    onBackClick: () -> Unit
+) {
+    val deepIndigo = Color(0xFF1B2A6B)
+    val royalBlue = Color(0xFF2447A8)
+    val mint = Color(0xFF7FE8D8)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(
+                RoundedCornerShape(
+                    bottomStart = 34.dp,
+                    bottomEnd = 34.dp
+                )
+            )
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(deepIndigo, royalBlue)
+                )
+            )
+            .drawBehind {
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.06f),
+                    radius = size.width * 0.42f,
+                    center = Offset(
+                        size.width * 0.98f,
+                        size.height * 0.05f
+                    )
                 )
 
-                Spacer(modifier = Modifier.height(5.dp))
-
-                Text(
-                    text = floor.description,
-                    fontSize = 11.sp,
-                    color = Color.Gray
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text(
-                    text = "${floor.resourceCount} ${floor.resourceType}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = PrimaryBlue
+                drawCircle(
+                    color = Color(0xFF1FB5A8).copy(alpha = 0.22f),
+                    radius = size.width * 0.30f,
+                    center = Offset(
+                        size.width * 0.04f,
+                        size.height * 1.02f
+                    )
                 )
             }
+            .padding(
+                start = 22.dp,
+                end = 22.dp,
+                top = 38.dp,
+                bottom = 32.dp
+            )
+    ) {
+        Column {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = 0.16f))
+                    .clickable { onBackClick() }
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 8.dp
+                    )
+            ) {
+                Text(
+                    text = "‹  Back",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "Find a Seat",
+                color = Color.White,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "Choose your preferred study space.",
+                color = mint,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }

@@ -31,9 +31,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,11 +38,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.seatspot.data.model.Library
 import com.example.seatspot.data.repository.FirestoreRepository
-import com.example.seatspot.getFirebaseIdToken
 import com.google.firebase.auth.FirebaseAuth
 import java.util.Calendar
 import kotlinx.coroutines.launch
 import com.example.seatspot.ui.components.SeatSpotBottomBar
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.example.seatspot.viewmodel.MyReservationsViewModel
+import com.example.seatspot.data.model.MyReservation
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import com.example.seatspot.R
 
 private val DeepIndigo = Color(0xFF1B2A6B)
 private val RoyalBlue = Color(0xFF2447A8)
@@ -63,11 +67,23 @@ fun HomeScreen(
     onExploreSeatsClick: () -> Unit,
     onMyReservationsClick: () -> Unit,
     onProfileClick: () -> Unit,
-    onDiscussionRoomsClick: () -> Unit
+    onDiscussionRoomsClick: () -> Unit,
+    reservationsViewModel: MyReservationsViewModel,
+    onAiAssistantClick: () -> Unit
+){
+    val reservationsUiState by reservationsViewModel.uiState.collectAsState()
 
-) {
     LaunchedEffect(Unit) {
-        getFirebaseIdToken()
+        val currentUser = FirebaseAuth.getInstance().currentUser
+
+        if (currentUser != null) {
+            currentUser.getIdToken(false)
+                .addOnSuccessListener { result ->
+                    result.token?.let { token ->
+                        reservationsViewModel.loadReservations(token)
+                    }
+                }
+        }
     }
     val userName = FirebaseAuth.getInstance()
         .currentUser?.displayName
@@ -143,34 +159,86 @@ fun HomeScreen(
             // CONTENT THAT OVERLAPS THE HEADER
             Column(
                 modifier = Modifier
-                    .layout { measurable, constraints ->
-                        val overlap = 34.dp.roundToPx()
-                        val placeable = measurable.measure(constraints)
-                        layout(placeable.width, placeable.height - overlap) {
-                            placeable.place(0, -overlap)
-                        }
-                    }
+                    .fillMaxWidth()
                     .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(22.dp)
-            ) {
+            ){
 
                 // LIBRARY OVERVIEW
-                LibraryOverviewCard(
-                    isLoading = isLoading.value,
-                    error = loadError.value,
-                    library = libraryState.value,
-                    modifier = Modifier.onGloballyPositioned {
-                        overviewTop.value = it.positionInParent().y.toInt()
-                    }
+                // FIND YOUR FOCUS ZONE
+                FocusZoneBanner()
+                AiStudyAssistantCard(
+                    onClick = onAiAssistantClick
                 )
 
                 // UPCOMING BOOKING (no reservation data is available on this screen)
-                UpcomingBookingEmptyState(onBookClick = onExploreSeatsClick)
+                val upcomingReservation = remember(reservationsUiState.reservations) {
+                    val now = System.currentTimeMillis()
+                    val today = java.text.SimpleDateFormat(
+                        "yyyy-MM-dd",
+                        java.util.Locale.US
+                    ).format(java.util.Date(now))
+
+                    reservationsUiState.reservations
+                        .filter { reservation ->
+                            val status = reservation.status.uppercase()
+
+                            if (status == "CANCELLED" ||
+                                status == "CANCELED" ||
+                                status == "COMPLETED"
+                            ) {
+                                false
+                            } else {
+                                val endMillis = parseReservationEndTime(reservation.endAt)
+
+                                if (endMillis != null) {
+                                    endMillis >= now
+                                } else {
+                                    reservation.date.isNotBlank() &&
+                                            reservation.date >= today
+                                }
+                            }
+                        }
+                        .sortedBy { it.startAt ?: "" }
+                        .firstOrNull()
+                }
+
+                when {
+                    reservationsUiState.isLoading -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = RoyalBlue
+                        )
+                    }
+
+                    reservationsUiState.error != null -> {
+                        Text(
+                            text = "Unable to load your bookings.",
+                            color = Color(0xFFB42318),
+                            fontSize = 13.sp
+                        )
+                    }
+
+                    upcomingReservation != null -> {
+                        UpcomingBookingCard(
+                            reservation = upcomingReservation,
+                            onClick = onMyReservationsClick
+                        )
+                    }
+
+                    else -> {
+                        UpcomingBookingEmptyState(
+                            onBookClick = onExploreSeatsClick
+                        )
+                    }
+                }
 
                 // QUICK ACTIONS
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
                     SectionTitle("Quick actions")
 
+                    // First row: Original three options
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -207,16 +275,17 @@ fun HomeScreen(
                                 }
                             }
                         )
+                    }
 
-                        QuickAction(
-                            kind = IconKind.LIBRARY,
-                            title = "Discussion Rooms",
-                            tileColor = SoftIndigo,
-                            iconColor = DeepIndigo,
-                            modifier = Modifier.fillMaxWidth(),
+                    // DISCUSSION ROOMS PROMOTIONAL SECTION
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        SectionTitle("Study together")
+
+                        DiscussionRoomPromoCard(
                             onClick = onDiscussionRoomsClick
                         )
-
                     }
                 }
 
@@ -556,6 +625,208 @@ private fun UpcomingBookingEmptyState(onBookClick: () -> Unit) {
         }
     }
 }
+//@Composable
+//private fun UpcomingBookingCard(
+//    reservation: MyReservation,
+//    onClick: () -> Unit
+//) {
+//    Column(
+//        modifier = Modifier
+//            .fillMaxWidth()
+//            .clip(RoundedCornerShape(26.dp))
+//            .background(
+//                Brush.linearGradient(listOf(DeepIndigo, RoyalBlue))
+//            )
+//            .padding(20.dp)
+//    ) {
+//        Text(
+//            text = "UPCOMING BOOKING",
+//            color = Mint,
+//            fontSize = 11.sp,
+//            fontWeight = FontWeight.Bold,
+//            letterSpacing = 1.2.sp
+//        )
+//
+//        Spacer(modifier = Modifier.height(14.dp))
+//
+//        Text(
+//            text = when (reservation.resourceType.uppercase()) {
+//                "COMPUTER" -> "Computer Station"
+//                "DISCUSSION_ROOM" -> "Discussion Room"
+//                else -> "Study Seat"
+//            },
+//            color = Color.White,
+//            fontSize = 19.sp,
+//            fontWeight = FontWeight.Bold
+//        )
+//
+//        Spacer(modifier = Modifier.height(8.dp))
+//
+//        Text(
+//            text = "Resource: ${reservation.resourceId}",
+//            color = Color.White.copy(alpha = 0.85f),
+//            fontSize = 13.sp
+//        )
+//
+//        Text(
+//            text = "Date: ${reservation.date}",
+//            color = Color.White.copy(alpha = 0.85f),
+//            fontSize = 13.sp
+//        )
+//
+//        Text(
+//            text = "Time: ${formatReservationTime(reservation.startAt)} – ${
+//                formatReservationTime(reservation.endAt)
+//            }",
+//            color = Color.White.copy(alpha = 0.85f),
+//            fontSize = 13.sp
+//        )
+//
+//        Spacer(modifier = Modifier.height(18.dp))
+//
+//        Button(
+//            onClick = onClick,
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .height(48.dp),
+//            shape = RoundedCornerShape(16.dp),
+//            colors = ButtonDefaults.buttonColors(
+//                containerColor = Color.White,
+//                contentColor = RoyalBlue
+//            )
+//        ) {
+//            Text(
+//                text = "View All Bookings",
+//                fontWeight = FontWeight.Bold
+//            )
+//        }
+//    }
+//}
+
+
+@Composable
+private fun UpcomingBookingCard(
+    reservation: MyReservation,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFF1B2A6B),
+                        Color(0xFF2447A8)
+                    )
+                )
+            )
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Text(
+            text = "UPCOMING BOOKING",
+            color = Mint,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.3.sp
+        )
+
+        Text(
+            text = when (reservation.resourceType.uppercase()) {
+                "COMPUTER" -> "Computer Station"
+                "DISCUSSION_ROOM" -> "Discussion Room"
+                else -> "Study Seat"
+            },
+            color = Color.White,
+            fontSize = 21.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            BookingInfoTile(
+                label = "Resource",
+                value = reservation.resourceId,
+                modifier = Modifier.weight(1f)
+            )
+
+            BookingInfoTile(
+                label = "Date",
+                value = reservation.date,
+                modifier = Modifier.weight(1f)
+            )
+
+            BookingInfoTile(
+                label = "Time",
+                value = "${formatReservationTime(reservation.startAt)} – ${
+                    formatReservationTime(reservation.endAt)
+                }",
+                modifier = Modifier.weight(1.35f)
+            )
+        }
+
+        Button(
+            onClick = onClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.White,
+                contentColor = RoyalBlue
+            ),
+            elevation = ButtonDefaults.buttonElevation(
+                defaultElevation = 2.dp
+            )
+        ) {
+            Text(
+                text = "View All Bookings",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun BookingInfoTile(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(15.dp))
+            .background(Color.White.copy(alpha = 0.13f))
+            .border(
+                1.dp,
+                Color.White.copy(alpha = 0.10f),
+                RoundedCornerShape(15.dp)
+            )
+            .padding(horizontal = 10.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.72f),
+            fontSize = 10.sp,
+            maxLines = 1
+        )
+
+        Text(
+            text = value,
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
 
 // ---------------------------------------------------------------------------
 // QUICK ACTIONS
@@ -591,7 +862,7 @@ private fun QuickAction(
                 spotColor = DeepIndigo.copy(alpha = 0.14f)
             )
             .clip(shape)
-            .background(Color.White)
+            .background(tileColor.copy(alpha = 0.65f))
             .clickable { onClick() }
             .padding(vertical = 16.dp, horizontal = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -600,7 +871,7 @@ private fun QuickAction(
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(tileColor),
+                .background(Color.White.copy(alpha = 0.65f)),
             contentAlignment = Alignment.Center
         ) {
             AppIcon(kind, iconColor, 26.dp)
@@ -620,11 +891,105 @@ private fun QuickAction(
     }
 }
 
+
+@Composable
+private fun DiscussionRoomPromoCard(
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFF11998E),
+                        Color(0xFF087F75)
+                    )
+                )
+            )
+            .padding(18.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(Color(0xFFDDF7F2)),
+                contentAlignment = Alignment.Center
+            ) {
+                AppIcon(
+                    kind = IconKind.GROUP,
+                    tint = Color(0xFF087F75),
+                    size = 26.dp
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = "Better together",
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Text(
+                    text = "Group project or study circle?",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = "Bring your ideas together! Reserve a private discussion room and collaborate without disturbing anyone.",
+            color = Color.White.copy(alpha = 0.95f),
+            fontSize = 13.sp,
+            lineHeight = 19.sp
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = onClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(15.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.White,
+                contentColor = Color(0xFF087F75)
+            ),
+            elevation = ButtonDefaults.buttonElevation(
+                defaultElevation = 3.dp
+            )
+        ) {
+            Text(
+                text = "Reserve a Room  →",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+
 // ---------------------------------------------------------------------------
 // VECTOR-FREE ICONS (drawn on a Canvas, so no icon dependency is needed)
 // ---------------------------------------------------------------------------
 
-private enum class IconKind { HOME, SEAT, CALENDAR, PROFILE, LIBRARY, ARROW }
+private enum class IconKind {
+    HOME, SEAT, CALENDAR, PROFILE, LIBRARY, ARROW, GROUP
+}
 
 @Composable
 private fun AppIcon(
@@ -642,6 +1007,61 @@ private fun AppIcon(
         )
 
         when (kind) {
+            IconKind.GROUP -> {
+                // Centre person
+                drawCircle(
+                    color = tint,
+                    radius = w * 0.105f,
+                    center = Offset(w * 0.5f, h * 0.29f),
+                    style = stroke
+                )
+
+                drawArc(
+                    color = tint,
+                    startAngle = 180f,
+                    sweepAngle = 180f,
+                    useCenter = false,
+                    topLeft = Offset(w * 0.29f, h * 0.48f),
+                    size = Size(w * 0.42f, h * 0.40f),
+                    style = stroke
+                )
+
+                // Left person
+                drawCircle(
+                    color = tint,
+                    radius = w * 0.075f,
+                    center = Offset(w * 0.19f, h * 0.40f),
+                    style = stroke
+                )
+
+                drawArc(
+                    color = tint,
+                    startAngle = 190f,
+                    sweepAngle = 145f,
+                    useCenter = false,
+                    topLeft = Offset(w * 0.04f, h * 0.60f),
+                    size = Size(w * 0.30f, h * 0.27f),
+                    style = stroke
+                )
+
+                // Right person
+                drawCircle(
+                    color = tint,
+                    radius = w * 0.075f,
+                    center = Offset(w * 0.81f, h * 0.40f),
+                    style = stroke
+                )
+
+                drawArc(
+                    color = tint,
+                    startAngle = 205f,
+                    sweepAngle = 145f,
+                    useCenter = false,
+                    topLeft = Offset(w * 0.66f, h * 0.60f),
+                    size = Size(w * 0.30f, h * 0.27f),
+                    style = stroke
+                )
+            }
             IconKind.HOME -> {
                 val roof = Path().apply {
                     moveTo(w * 0.12f, h * 0.48f)
@@ -734,6 +1154,160 @@ private fun AppIcon(
                     lineTo(w * 0.56f, h * 0.78f)
                 }
                 drawPath(head, tint, style = stroke)
+            }
+        }
+    }
+}
+
+private fun parseReservationEndTime(value: String?): Long? {
+    if (value.isNullOrBlank()) return null
+
+    val patterns = listOf(
+        "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+        "yyyy-MM-dd'T'HH:mm:ss'Z'"
+    )
+
+    for (pattern in patterns) {
+        try {
+            val format = java.text.SimpleDateFormat(
+                pattern,
+                java.util.Locale.US
+            ).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }
+
+            return format.parse(value)?.time
+        } catch (_: Exception) {
+            // Try the next format.
+        }
+    }
+
+    return null
+}
+
+private fun formatReservationTime(value: String?): String {
+    if (value.isNullOrBlank()) return "--"
+
+    return try {
+        val inputFormat = java.text.SimpleDateFormat(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            java.util.Locale.US
+        ).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
+
+        val date = inputFormat.parse(value)
+            ?: return value
+
+        java.text.SimpleDateFormat(
+            "hh:mm a",
+            java.util.Locale.getDefault()
+        ).format(date)
+    } catch (_: Exception) {
+        value
+    }
+}
+
+
+@Composable
+private fun FocusZoneBanner() {
+    Image(
+        painter = painterResource(
+            id = R.drawable.focus_zone_banner
+        ),
+        contentDescription = "Find Your Focus Zone",
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(330.dp).padding(top=12.dp)
+            .clip(RoundedCornerShape(24.dp)),
+        contentScale = ContentScale.Crop
+    )
+}
+
+
+@Composable
+private fun AiStudyAssistantCard(
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 3.dp
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(RoundedCornerShape(15.dp))
+                        .background(SoftTeal),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "✦",
+                        color = Teal,
+                        fontSize = 27.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "AI Study Assistant",
+                        color = PrimaryText,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Smart recommendations for you",
+                        color = SecondaryText,
+                        fontSize = 11.sp
+                    )
+                }
+
+                Text(
+                    text = "NEW",
+                    color = RoyalBlue,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Text(
+                text = "Find a study space that matches your needs.",
+                color = SecondaryText,
+                fontSize = 13.sp
+            )
+
+            Button(
+                onClick = onClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = RoyalBlue,
+                    contentColor = Color.White
+                )
+            ) {
+                Text(
+                    text = "Explore AI Recommendations",
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }

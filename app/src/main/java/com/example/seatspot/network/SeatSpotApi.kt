@@ -15,8 +15,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 object SeatSpotApi {
 
-    private const val BASE_URL =
-        "https://unclamped-walnut-stipend.ngrok-free.dev"
+    const val BASE_URL = "https://unclamped-walnut-stipend.ngrok-free.dev"
 
     private val client = OkHttpClient()
 
@@ -242,7 +241,109 @@ object SeatSpotApi {
         })
     }
 
+    fun getDiscussionRoomAvailability(
+        idToken: String,
+        date: String,
+        roomId: String,
+        onResult: (Result<String>) -> Unit
+    ) {
+        val url = "$BASE_URL/api/availability" +
+                "?date=$date" +
+                "&resourceType=DISCUSSION_ROOM" +
+                "&roomId=$roomId"
 
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $idToken")
+            .addHeader("ngrok-skip-browser-warning", "true")
+            .get()
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+
+            override fun onFailure(call: Call, e: IOException) {
+                Handler(Looper.getMainLooper()).post {
+                    onResult(Result.failure(e))
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use { res ->
+                    val body = res.body?.string().orEmpty()
+
+                    Handler(Looper.getMainLooper()).post {
+                        if (res.isSuccessful) {
+                            onResult(Result.success(body))
+                        } else {
+                            onResult(
+                                Result.failure(
+                                    Exception("HTTP ${res.code}: $body")
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    fun createDiscussionRoomReservation(
+        idToken: String,
+        roomId: String,
+        memberCount: Int,
+        date: String,
+        startTime: String,
+        endTime: String,
+        onResult: (Result<String>) -> Unit
+    ) {
+        val json = JSONObject().apply {
+            put("resourceType", "DISCUSSION_ROOM")
+            put("resourceId", roomId)
+            put("roomId", roomId)
+            put("memberCount", memberCount)
+            put("date", date)
+            put("startTime", startTime)
+            put("endTime", endTime)
+        }
+
+        val requestBody = json.toString().toRequestBody(
+            "application/json; charset=utf-8".toMediaType()
+        )
+
+        val request = Request.Builder()
+            .url("$BASE_URL/api/reservations")
+            .addHeader("Authorization", "Bearer $idToken")
+            .addHeader("ngrok-skip-browser-warning", "true")
+            .post(requestBody)
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+
+            override fun onFailure(call: Call, e: IOException) {
+                Handler(Looper.getMainLooper()).post {
+                    onResult(Result.failure(e))
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use { res ->
+                    val body = res.body?.string().orEmpty()
+
+                    Handler(Looper.getMainLooper()).post {
+                        if (res.isSuccessful) {
+                            onResult(Result.success(body))
+                        } else {
+                            onResult(
+                                Result.failure(
+                                    Exception("HTTP ${res.code}: $body")
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        })
+    }
 
     fun cancelReservation(
         idToken: String,

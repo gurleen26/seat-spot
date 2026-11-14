@@ -1,13 +1,17 @@
-
-/build
-
-# Android and Gradle local files
+# Android
 .gradle/
+build/
 **/build/
 local.properties
+*.iml
 
-# Android Studio settings
-.idea/
-
-# Firebase configuration
+# Firebase
 google-services.json
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/

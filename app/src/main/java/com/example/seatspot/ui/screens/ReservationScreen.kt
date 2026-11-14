@@ -1,4 +1,3 @@
-
 package com.example.seatspot.ui.screens
 
 import androidx.compose.foundation.background
@@ -89,173 +88,187 @@ fun ReservationScreen(
 
 
 
+    val resourceLabel = when (resourceType) {
+        "COMPUTER" -> "Computer"
+        "SECOND_FLOOR_SEAT" -> "Table seat"
+        else -> "Study seat"
+    }
+    val resourceCode = if (resourceType == "COMPUTER") "PC $seatNumber" else "S$seatNumber"
+    val locationDescription = when (resourceType) {
+        "COMPUTER" -> "First Floor • $labId"
+        "SECOND_FLOOR_SEAT" -> "Second Floor • $sectionId • $tableId"
+        else -> "Ground Floor • $areaId • $sectionId"
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(SeatSpotBackground)
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .verticalScroll(rememberScrollState())
-            .padding(20.dp),
+            .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
-    )  {
-        Text(
-            text = when (resourceType) {
-                "COMPUTER" -> "Reserve Your Computer"
-                "SECOND_FLOOR_SEAT" -> "Reserve Your Table Seat"
-                else -> "Reserve Your Seat"
-            },
-            fontSize = 27.sp,
-            fontWeight = FontWeight.Bold,
-            color = SeatSpotBlue
-        )
-
-        Text(
-            text = "Choose when you want to study.",
-            color = Color(0xFF606775),
-            fontSize = 15.sp
-        )
-
-        // Selected seat details
-        Card(
+    ) {
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = SeatSpotBlue
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Central Library",
-                        color = Color.White,
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(5.dp))
-                    Text(
-                        text = if (resourceType == "COMPUTER") {
-                            "Computer ID: $seatId"
-                        } else {
-                            seatId
-                        },
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
-                }
-
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color.White
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(
-                            horizontal = 16.dp,
-                            vertical = 10.dp
-                        ),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (resourceType == "COMPUTER") {
-                                "PC $seatNumber"
-                            } else {
-                                "S$seatNumber"
-                            },
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SeatSpotBlue
-                        )
-                        Text(
-                            if (resourceType == "COMPUTER") "Your computer" else "Your seat",
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-            }
-        }
-
-        // Date selection
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Your study session",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
+                text = "‹",
+                color = SeatSpotBlue,
+                fontSize = 34.sp,
+                fontWeight = FontWeight.Light
             )
+            Column(modifier = Modifier.padding(start = 10.dp)) {
+                Text(
+                    text = "Review booking",
+                    fontSize = 25.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF172B67)
+                )
+                Text(
+                    text = "Make sure everything looks right",
+                    color = Color(0xFF687386),
+                    fontSize = 13.sp
+                )
+            }
+        }
 
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF172B67))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(22.dp),
+                verticalArrangement = Arrangement.spacedBy(13.dp)
+            ) {
+                Text(
+                    text = "YOUR STUDY SPACE",
+                    color = Color.White.copy(alpha = 0.72f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Central Library",
+                            color = Color.White,
+                            fontSize = 21.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = locationDescription,
+                            color = Color.White.copy(alpha = 0.78f),
+                            fontSize = 13.sp
+                        )
+                    }
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF20B6A6))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 17.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = resourceCode,
+                                color = Color.White,
+                                fontSize = 23.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = resourceLabel,
+                                color = Color.White,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = if (resourceType == "COMPUTER") "Computer ID: $seatId" else "Resource ID: $seatId",
+                    color = Color.White.copy(alpha = 0.72f),
+                    fontSize = 12.sp
+                )
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                text = "Reservation details",
+                color = Color(0xFF172B67),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color.White
-                )
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text(
-                        text = "RESERVATION DATE",
-                        fontSize = 12.sp,
-                        color = Color(0xFF686F7A)
-                    )
-
-                    Text(
-                        text = displayDate,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    Text(
-                        text = "STUDY TIMING",
-                        fontSize = 12.sp,
-                        color = Color(0xFF686F7A)
-                    )
-
-                    Text(
-                        text = "$startTime - $endTime",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = SeatSpotBlue
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("DATE", color = Color(0xFF8490A3), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Spacer(Modifier.height(5.dp))
+                            Text(displayDate, color = Color(0xFF1D2B49), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("DURATION", color = Color(0xFF8490A3), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Spacer(Modifier.height(5.dp))
+                            val durationMinutes = runCatching {
+                                val a = startTime.split(":")
+                                val b = endTime.split(":")
+                                (b[0].toInt() * 60 + b[1].toInt()) - (a[0].toInt() * 60 + a[1].toInt())
+                            }.getOrDefault(0)
+                            Text(
+                                text = if (durationMinutes > 0) "${durationMinutes / 60}h ${durationMinutes % 60}m" else "—",
+                                color = Color(0xFF20A596),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    androidx.compose.material3.HorizontalDivider(color = Color(0xFFE9EEF5))
+                    Column {
+                        Text("STUDY TIME", color = Color(0xFF8490A3), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Spacer(Modifier.height(5.dp))
+                        Text(
+                            text = "$startTime  –  $endTime",
+                            color = Color(0xFF2447A8),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
 
-
-        // Session summary
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFFE8F5EE)
-            )
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFE5F6F2))
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Reservation summary",
-                    fontWeight = FontWeight.SemiBold,
-                    color = SeatSpotGreen
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    when (resourceType) {
-                        "COMPUTER" -> "Computer PC $seatNumber"
-                        "SECOND_FLOOR_SEAT" ->
-                            "Second Floor • $sectionId • $tableId • Seat S$seatNumber"
-                        else -> "Seat S$seatNumber"
-                    }
-                )
-                Text(displayDate)
-                Text("$startTime - $endTime")
+            Row(
+                modifier = Modifier.padding(15.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("✓", color = Color(0xFF168A78), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Column(modifier = Modifier.padding(start = 11.dp)) {
+                    Text("Ready to reserve?", color = Color(0xFF146B60), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("Your selected study space will be held for this time slot.", color = Color(0xFF47766F), fontSize = 12.sp)
+                }
             }
         }
 
@@ -353,8 +366,14 @@ fun ReservationScreen(
                     !bookingSuccess,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(14.dp)
+                .height(56.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF2447A8),
+                contentColor = Color.White,
+                disabledContainerColor = Color(0xFF9AA9C9),
+                disabledContentColor = Color.White
+            )
         ) {
             if (isBooking) {
                 CircularProgressIndicator(
@@ -372,16 +391,21 @@ fun ReservationScreen(
             }
         }
         bookingMessage?.let { message ->
-            Text(
-                text = message,
-                color = if (bookingSuccess) {
-                    SeatSpotGreen
-                } else {
-                    Color.Red
-                },
-                fontWeight = FontWeight.Medium,
-                fontSize = 14.sp
-            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (bookingSuccess) Color(0xFFE5F6F2) else Color(0xFFFFEEEE)
+                )
+            ) {
+                Text(
+                    text = message,
+                    modifier = Modifier.padding(15.dp),
+                    color = if (bookingSuccess) SeatSpotGreen else Color(0xFFB3261E),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp
+                )
+            }
         }
 
         TextButton(
@@ -389,13 +413,10 @@ fun ReservationScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                if (resourceType == "COMPUTER") {
-                    "Back to Computers"
-                } else {
-                    "Back to Seats"
-                }
+                if (resourceType == "COMPUTER") "←  Edit computer selection" else "←  Edit seat selection",
+                color = Color(0xFF2447A8),
+                fontWeight = FontWeight.SemiBold
             )
         }
     }
 }
-

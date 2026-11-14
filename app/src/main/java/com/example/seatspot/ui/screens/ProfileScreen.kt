@@ -7,6 +7,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,8 +26,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.auth.FirebaseAuth
 import com.example.seatspot.ui.components.SeatSpotBottomBar
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.UserProfileChangeRequest
 
 private val ProfileIndigo = Color(0xFF1B2A6B)
 private val ProfileBlue = Color(0xFF2447A8)
@@ -26,6 +36,7 @@ private val ProfileTeal = Color(0xFF1FB5A8)
 private val ProfileBackground = Color(0xFFF3F6FC)
 private val ProfileText = Color(0xFF172554)
 private val ProfileSecondary = Color(0xFF64748B)
+private val ProfileDanger = Color(0xFFD32F2F)
 
 @Composable
 fun ProfileScreen(
@@ -61,13 +72,17 @@ fun ProfileScreen(
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
         ) {
-            // HEADER
+            // PROFILE HEADER
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        Brush.linearGradient(
-                            listOf(ProfileIndigo, ProfileBlue, ProfileTeal)
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                ProfileIndigo,
+                                ProfileBlue,
+                                ProfileTeal
+                            )
                         ),
                         shape = RoundedCornerShape(
                             bottomStart = 30.dp,
@@ -84,24 +99,39 @@ fun ProfileScreen(
                     fontWeight = FontWeight.Bold
                 )
 
-                Spacer(Modifier.height(22.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
                 Box(
                     modifier = Modifier
-                        .size(88.dp)
+                        .size(94.dp)
                         .clip(CircleShape)
-                        .background(Color.White),
+                        .background(Color.White)
+                        .padding(4.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(ProfileTeal, ProfileBlue)
+                            )
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = initials,
-                        color = ProfileIndigo,
-                        fontSize = 29.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(82.dp)
+                            .clip(CircleShape)
+                            .background(Color.White),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = initials,
+                            color = ProfileIndigo,
+                            fontSize = 29.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
                     text = displayName.ifBlank { "Student" },
@@ -112,21 +142,21 @@ fun ProfileScreen(
 
                 Text(
                     text = email,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = Color.White.copy(alpha = 0.86f),
                     fontSize = 13.sp
                 )
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 ProfileSectionTitle("Account")
 
                 ProfileOption(
-                    icon = "✎",
+                    icon = Icons.Default.Edit,
                     title = "Edit Profile",
                     subtitle = "Change your display name",
                     onClick = {
@@ -136,14 +166,14 @@ fun ProfileScreen(
                 )
 
                 ProfileOption(
-                    icon = "▣",
+                    icon = Icons.Default.CalendarMonth,
                     title = "My Reservations",
                     subtitle = "View your booking history",
                     onClick = onMyReservationsClick
                 )
 
                 ProfileOption(
-                    icon = "✓",
+                    icon = Icons.Default.Security,
                     title = "Account & Security",
                     subtitle = if (user?.isEmailVerified == true) {
                         "Email verified"
@@ -162,12 +192,12 @@ fun ProfileScreen(
                     }
                 )
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 ProfileSectionTitle("Preferences & Support")
 
                 ProfileOption(
-                    icon = "♧",
+                    icon = Icons.Default.NotificationsNone,
                     title = "Notifications",
                     subtitle = "Notification preferences",
                     onClick = {
@@ -176,7 +206,7 @@ fun ProfileScreen(
                 )
 
                 ProfileOption(
-                    icon = "?",
+                    icon = Icons.Default.HelpOutline,
                     title = "Help & Support",
                     subtitle = "Get assistance with SeatSpot",
                     onClick = {
@@ -185,7 +215,7 @@ fun ProfileScreen(
                 )
 
                 ProfileOption(
-                    icon = "ⓘ",
+                    icon = Icons.Default.Info,
                     title = "About SeatSpot",
                     subtitle = "App information",
                     onClick = {
@@ -193,17 +223,20 @@ fun ProfileScreen(
                     }
                 )
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 ProfileOption(
-                    icon = "↪",
+                    icon = Icons.Default.Logout,
                     title = "Logout",
                     subtitle = "Sign out of your account",
                     isDestructive = true,
                     onClick = { showLogoutDialog = true }
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
             }
         }
+
         SeatSpotBottomBar(
             selectedRoute = "profile",
             onDestinationClick = { route ->
@@ -216,13 +249,25 @@ fun ProfileScreen(
     if (showEditDialog) {
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
-            title = { Text("Edit Profile") },
+            title = {
+                Text(
+                    text = "Edit Profile",
+                    color = ProfileText,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 OutlinedTextField(
                     value = editName,
                     onValueChange = { editName = it },
                     label = { Text("Display name") },
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ProfileBlue,
+                        focusedLabelColor = ProfileBlue,
+                        cursorColor = ProfileBlue
+                    )
                 )
             },
             confirmButton = {
@@ -230,11 +275,9 @@ fun ProfileScreen(
                     onClick = {
                         val newName = editName.trim()
                         if (newName.isNotBlank()) {
-                            val profileUpdates =
-                                com.google.firebase.auth.UserProfileChangeRequest
-                                    .Builder()
-                                    .setDisplayName(newName)
-                                    .build()
+                            val profileUpdates = UserProfileChangeRequest.Builder()
+                                .setDisplayName(newName)
+                                .build()
 
                             user?.updateProfile(profileUpdates)
                                 ?.addOnSuccessListener {
@@ -249,16 +292,26 @@ fun ProfileScreen(
                             message = "Name cannot be empty."
                         }
                         showEditDialog = false
-                    }
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = ProfileBlue
+                    )
                 ) {
-                    Text("Save")
+                    Text("Save", fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEditDialog = false }) {
+                TextButton(
+                    onClick = { showEditDialog = false },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = ProfileSecondary
+                    )
+                ) {
                     Text("Cancel")
                 }
-            }
+            },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = Color.White
         )
     }
 
@@ -266,7 +319,13 @@ fun ProfileScreen(
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
-            title = { Text("Logout") },
+            title = {
+                Text(
+                    text = "Logout",
+                    color = ProfileText,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Text("Are you sure you want to sign out of SeatSpot?")
             },
@@ -275,16 +334,26 @@ fun ProfileScreen(
                     onClick = {
                         showLogoutDialog = false
                         onLogout()
-                    }
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = ProfileDanger
+                    )
                 ) {
-                    Text("Logout", color = Color(0xFFD32F2F))
+                    Text("Logout", fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) {
+                TextButton(
+                    onClick = { showLogoutDialog = false },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = ProfileBlue
+                    )
+                ) {
                     Text("Cancel")
                 }
-            }
+            },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = Color.White
         )
     }
 
@@ -292,13 +361,26 @@ fun ProfileScreen(
     message?.let { text ->
         AlertDialog(
             onDismissRequest = { message = null },
-            title = { Text("SeatSpot") },
+            title = {
+                Text(
+                    text = "SeatSpot",
+                    color = ProfileText,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = { Text(text) },
             confirmButton = {
-                TextButton(onClick = { message = null }) {
-                    Text("OK")
+                TextButton(
+                    onClick = { message = null },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = ProfileBlue
+                    )
+                ) {
+                    Text("OK", fontWeight = FontWeight.SemiBold)
                 }
-            }
+            },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = Color.White
         )
     }
 }
@@ -315,17 +397,19 @@ private fun ProfileSectionTitle(title: String) {
 
 @Composable
 private fun ProfileOption(
-    icon: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     subtitle: String,
     isDestructive: Boolean = false,
     onClick: () -> Unit
 ) {
-    val itemColor = if (isDestructive) {
-        Color(0xFFD32F2F)
+    val itemColor = if (isDestructive) ProfileDanger else ProfileText
+    val iconBackground = if (isDestructive) {
+        Color(0xFFFFEEEE)
     } else {
-        ProfileText
+        Color(0xFFE8EEFF)
     }
+    val iconTint = if (isDestructive) ProfileDanger else ProfileBlue
 
     Card(
         modifier = Modifier
@@ -335,40 +419,45 @@ private fun ProfileOption(
         colors = CardDefaults.cardColors(
             containerColor = Color.White
         ),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 1.dp
+        )
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 15.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(46.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(
-                        if (isDestructive) Color(0xFFFFEEEE)
-                        else Color(0xFFE8EEFF)
-                    ),
+                    .background(iconBackground),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = icon,
-                    color = itemColor,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(23.dp)
                 )
             }
 
-            Spacer(Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(
                     text = title,
                     color = itemColor,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp
                 )
-                Spacer(Modifier.height(3.dp))
+
+                Spacer(modifier = Modifier.height(3.dp))
+
                 Text(
                     text = subtitle,
                     color = ProfileSecondary,
@@ -376,10 +465,11 @@ private fun ProfileOption(
                 )
             }
 
-            Text(
-                text = "›",
-                color = ProfileSecondary,
-                fontSize = 25.sp
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = ProfileSecondary,
+                modifier = Modifier.size(22.dp)
             )
         }
     }

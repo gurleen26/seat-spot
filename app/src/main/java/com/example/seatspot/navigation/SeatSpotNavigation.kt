@@ -33,10 +33,24 @@ import androidx.compose.runtime.*
 import com.example.seatspot.data.model.DiscussionRoom
 import com.example.seatspot.data.repository.DiscussionRoomRepository
 import com.example.seatspot.ui.screens.DiscussionRoomBookingScreen
+import android.widget.Toast
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.example.seatspot.network.SeatSpotApi
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
+import com.example.seatspot.ui.components.AiChatSheet
+import com.example.seatspot.data.model.AiOption
+import com.example.seatspot.data.model.AiProposal
 
 @Composable
 fun SeatSpotNavigation() {
     val navController = rememberNavController()
+    val reservationsViewModel: MyReservationsViewModel = viewModel()
 
     fun navigateToTab(route: String) {
         navController.navigate(route) {
@@ -129,6 +143,55 @@ fun SeatSpotNavigation() {
                 },
                 onDiscussionRoomsClick = {
                     navController.navigate("discussion_rooms")
+                },
+                onAiAssistantClick = {
+                    navController.navigate("ai_assistant")
+                },
+                reservationsViewModel = reservationsViewModel
+            )
+        }
+
+        composable("ai_assistant") {
+            AiChatSheet(
+                onDismiss = {
+                    navController.popBackStack()
+                },
+                onOptionSelected = { option: AiOption, proposal: AiProposal ->
+
+                    when (option.resourceType.uppercase()) {
+
+                        "DISCUSSION_ROOM" -> {
+
+                            navController.currentBackStackEntry
+                                ?.savedStateHandle?.apply {
+                                    set("ai_date", proposal.date)
+                                    set("ai_start_time", proposal.startTime)
+                                    set("ai_duration", proposal.durationMinutes)
+                                    set("ai_group_size", proposal.groupSize)
+                                }
+
+                            navController.navigate(
+                                "discussion_room_booking/${option.resourceId}"
+                            )
+                        }
+
+                        "SEAT", "SECOND_FLOOR_SEAT", "COMPUTER" -> {
+
+                            val areaId = if (option.resourceType.uppercase() == "COMPUTER") {
+                                option.labId
+                            } else {
+                                option.areaId
+                            }
+
+                            navController.navigate(
+                                "reservation/${android.net.Uri.encode(option.resourceId)}/${option.seatNumber}/" +
+                                        "${android.net.Uri.encode(areaId)}/" +
+                                        "${android.net.Uri.encode(option.sectionId)}/" +
+                                        "${android.net.Uri.encode(option.tableId)}/" +
+                                        "${proposal.date}/${proposal.startTime}/${proposal.endTime}/${option.resourceType}"
+                            )
+                        }
+                    }
                 }
             )
         }
@@ -147,6 +210,27 @@ fun SeatSpotNavigation() {
         }
 
         composable("discussion_room_booking/{roomId}") { backStackEntry ->
+            val aiDate = remember(backStackEntry) {
+                navController.previousBackStackEntry
+                    ?.savedStateHandle?.get<String>("ai_date") ?: ""
+            }
+
+            val aiStartTime = remember(backStackEntry) {
+                navController.previousBackStackEntry
+                    ?.savedStateHandle?.get<String>("ai_start_time") ?: ""
+            }
+
+            val aiDuration = remember(backStackEntry) {
+                navController.previousBackStackEntry
+                    ?.savedStateHandle?.get<Int>("ai_duration") ?: 60
+            }
+
+            val aiGroupSize = remember(backStackEntry) {
+                navController.previousBackStackEntry
+                    ?.savedStateHandle?.get<Int>("ai_group_size") ?: 2
+            }
+
+            val context = LocalContext.current
 
             val roomId = backStackEntry.arguments?.getString("roomId")
 
@@ -164,11 +248,107 @@ fun SeatSpotNavigation() {
             selectedRoom?.let { room ->
                 DiscussionRoomBookingScreen(
                     room = room,
+                    initialDate = aiDate,
+                    initialStartTime = aiStartTime,
+                    initialDuration = aiDuration,
+                    initialGroupSize = aiGroupSize,
                     onBackClick = {
                         navController.popBackStack()
                     },
-                    onBookClick = { groupSize ->
-                        // Booking API will be connected next
+                    onBookClick = { date, startTime, duration, groupSize ->
+
+                        val user = FirebaseAuth.getInstance().currentUser
+
+                        if (user == null) {
+                            Toast.makeText(
+                                context,
+                                "Please sign in again.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+
+                            val formatter = SimpleDateFormat(
+                                "yyyy-MM-dd HH:mm",
+                                Locale.US
+                            ).apply {
+                                isLenient = false
+                                timeZone = TimeZone.getTimeZone("Asia/Kolkata")
+                            }
+
+                            try {
+                                val startDate = formatter.parse("$date $startTime")
+                                    ?: throw IllegalArgumentException("Invalid booking time")
+
+                                val calendar = Calendar.getInstance(
+                                    TimeZone.getTimeZone("Asia/Kolkata")
+                                )
+
+                                calendar.time = startDate
+                                calendar.add(Calendar.MINUTE, duration)
+
+                                val endTime = SimpleDateFormat(
+                                    "HH:mm",
+                                    Locale.US
+                                ).format(calendar.time)
+
+                                user.getIdToken(false)
+                                    .addOnSuccessListener { tokenResult ->
+
+                                        val token = tokenResult.token
+
+                                        if (token.isNullOrEmpty()) {
+                                            Toast.makeText(
+                                                context,
+                                                "Authentication failed.",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            return@addOnSuccessListener
+                                        }
+
+                                        SeatSpotApi.createDiscussionRoomReservation(
+                                            idToken = token,
+                                            roomId = room.roomId,
+                                            memberCount = groupSize,
+                                            date = date,
+                                            startTime = startTime,
+                                            endTime = endTime
+                                        ) { result ->
+
+                                            result.onSuccess {
+                                                Toast.makeText(
+                                                    context,
+                                                    "Discussion room booked successfully!",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+
+                                                navController.popBackStack()
+                                            }
+
+                                            result.onFailure { error ->
+                                                Toast.makeText(
+                                                    context,
+                                                    error.message ?: "Booking failed.",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        }
+                                    }
+                                    .addOnFailureListener {
+                                        Toast.makeText(
+                                            context,
+                                            "Unable to authenticate. Please try again.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+
+                            } catch (e: Exception) {
+                                Toast.makeText(
+                                    context,
+                                    "Invalid date or time.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
                     }
                 )
             }

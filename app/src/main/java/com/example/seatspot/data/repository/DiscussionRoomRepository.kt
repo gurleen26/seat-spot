@@ -19,7 +19,8 @@ class DiscussionRoomRepository {
 
                 val rooms = snapshot.documents.mapNotNull { document ->
                     document.toObject(DiscussionRoom::class.java)
-                }
+                        ?.copy(roomId = document.id)
+                }.distinctBy { it.roomId }
 
                 onResult(Result.success(rooms))
             }
