@@ -4,14 +4,27 @@ build/
 **/build/
 local.properties
 *.iml
+*.apk
+*.aab
 
-# Firebase
+# Android Studio
+.idea/
+
+# Firebase Android configuration
 google-services.json
 
-# Secrets
+# Environment variables and secrets
 .env
 .env.*
 !.env.example
 
-# IDE
-.idea/
+# Backend dependencies
+node_modules/
+**/node_modules/
+
+# Firebase Admin credentials
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+
+# Logs
+npm-debug.log*
