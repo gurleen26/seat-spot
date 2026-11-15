@@ -1,0 +1,92 @@
+{
+  "project_info": {
+    "project_number": "164399474047",
+    "project_id": "seatspot-92f53",
+    "storage_bucket": "seatspot-92f53.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:164399474047:android:438dc34fca235564bd664a",
+        "android_client_info": {
+          "package_name": "com.example.seatspot"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "164399474047-eu4og08m98llepl78ddlno8huh1rior7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.seatspot",
+            "certificate_hash": "af5c2fe0dd737de30f3fddf22b0dc4c4f14f5310"
+          }
+        },
+        {
+          "client_id": "164399474047-tl9dbg29phuoku4ff6i46unvr55j419d.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.seatspot",
+            "certificate_hash": "59c062504ab605f441dda5b3e5a7d351950172aa"
+          }
+        },
+        {
+          "client_id": "164399474047-2uvgodn1r9co0j9kgvu3q6bkvmhuk6di.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjhEwv12IuaxjWQAPH5fo-UqTjMIz0pgo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "164399474047-2uvgodn1r9co0j9kgvu3q6bkvmhuk6di.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:164399474047:android:75b24270ba561c68bd664a",
+        "android_client_info": {
+          "package_name": "com.seatspot.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "164399474047-21l0sr066jhl74m9phl9tvcif7u3k9l0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.seatspot.app",
+            "certificate_hash": "59c062504ab605f441dda5b3e5a7d351950172aa"
+          }
+        },
+        {
+          "client_id": "164399474047-2uvgodn1r9co0j9kgvu3q6bkvmhuk6di.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjhEwv12IuaxjWQAPH5fo-UqTjMIz0pgo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "164399474047-2uvgodn1r9co0j9kgvu3q6bkvmhuk6di.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

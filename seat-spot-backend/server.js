@@ -20,7 +20,13 @@ const {
     getAuth
 } = require("firebase-admin/auth");
 
-const serviceAccount = require("./serviceAccountKey.json");
+const path = require("path");
+
+const serviceAccountPath =
+    process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
+    path.join(__dirname, "serviceAccountKey.json");
+
+const serviceAccount = require(serviceAccountPath);
 
 const firebaseApp = initializeApp({
     credential: cert(serviceAccount)
@@ -1021,6 +1027,149 @@ app.delete(
         }
     }
 );
+
+
+// -------------------------------
+// DELETE USER ACCOUNT
+// -------------------------------
+
+app.delete(
+    "/api/account",
+    verifyFirebaseToken,
+    async (req, res) => {
+        const uid = req.user.uid;
+
+        try {
+            // Require recent authentication before permanent deletion.
+            const decodedToken = await auth.verifyIdToken(
+                req.headers.authorization.substring(7)
+            );
+
+            const authTime = decodedToken.auth_time || 0;
+            const fiveMinutes = 5 * 60;
+
+            if (Math.floor(Date.now() / 1000) - authTime > fiveMinutes) {
+                return res.status(401).json({
+                    success: false,
+                    code: "RECENT_LOGIN_REQUIRED",
+                    message: "Please sign in again before deleting your account."
+                });
+            }
+
+            // Find all reservations owned by this user.
+            const snapshot = await db.collection("reservations")
+                .where("userId", "==", uid)
+                .get();
+
+            const now = Date.now();
+            let cancelledCount = 0;
+
+            // Cancel eligible future reservations one at a time.
+            for (const doc of snapshot.docs) {
+                const reservationRef = doc.ref;
+
+                const wasCancelled = await db.runTransaction(async (transaction) => {
+                    const reservationSnapshot =
+                        await transaction.get(reservationRef);
+
+                    if (!reservationSnapshot.exists) return false;
+
+                    const booking = reservationSnapshot.data();
+
+                    if (
+                        booking.userId !== uid ||
+                        !["PENDING", "CONFIRMED"].includes(booking.status) ||
+                        !booking.startAt ||
+                        booking.startAt.toMillis() <= now
+                    ) {
+                        return false;
+                    }
+
+                    const lockId =
+                        booking.resourceType === "DISCUSSION_ROOM"
+                            ? `discussion_${booking.resourceId}_${booking.date}`
+                        : booking.resourceType === "COMPUTER"
+                            ? `first_${booking.labId}_${booking.resourceId}_${booking.date}`
+                        : booking.resourceType === "SECOND_FLOOR_SEAT"
+                            ? `second_${booking.sectionId}_${booking.tableId}_${booking.resourceId}_${booking.date}`
+                        : `ground_${booking.areaId}_${booking.sectionId}_${booking.resourceId}_${booking.date}`;
+
+                    const lockRef = db.collection("reservationLocks").doc(lockId);
+                    const lockSnapshot = await transaction.get(lockRef);
+
+                    const revision = lockSnapshot.exists
+                        ? (lockSnapshot.data().revision || 0) + 1
+                        : 1;
+
+                    transaction.update(reservationRef, {
+                        status: "CANCELLED",
+                        cancelledAt: FieldValue.serverTimestamp(),
+                        updatedAt: FieldValue.serverTimestamp()
+                    });
+
+                    transaction.set(lockRef, {
+                        resourceId: booking.resourceId,
+                        date: booking.date,
+                        revision,
+                        updatedAt: FieldValue.serverTimestamp()
+                    }, { merge: true });
+
+                    return true;
+                });
+
+                // Count only after Firestore confirms the transaction result.
+                if (wasCancelled) {
+                    cancelledCount++;
+                }
+            }
+
+            // Anonymize retained reservation records belonging to this user.
+            const remainingSnapshot = await db.collection("reservations")
+                .where("userId", "==", uid)
+                .get();
+
+            const batchSize = 400;
+
+            for (let i = 0; i < remainingSnapshot.docs.length; i += batchSize) {
+                const batch = db.batch();
+
+                remainingSnapshot.docs
+                    .slice(i, i + batchSize)
+                    .forEach((doc) => {
+                        const data = doc.data();
+
+                        batch.update(doc.ref, {
+                            userId: "DELETED_USER",
+                            memberIds: (data.memberIds || []).filter(
+                                (memberId) => memberId !== uid
+                            ),
+                            updatedAt: FieldValue.serverTimestamp()
+                        });
+                    });
+
+                await batch.commit();
+            }
+
+            // Remove the Firebase Authentication account last.
+            await auth.deleteUser(uid);
+
+            return res.status(200).json({
+                success: true,
+                message: "Account deleted successfully.",
+                cancelledReservations: cancelledCount
+            });
+
+        } catch (error) {
+            console.error("Account deletion error:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Account deletion could not be completed. Please contact support if the problem continues."
+            });
+        }
+    }
+);
+
 
 // -------------------------------
 // START SERVER
