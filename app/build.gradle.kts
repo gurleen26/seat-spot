@@ -11,7 +11,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.seatspot"
+        applicationId = "com.seatspot.app"
         minSdk = 24
         targetSdk = 37
         versionCode = 1

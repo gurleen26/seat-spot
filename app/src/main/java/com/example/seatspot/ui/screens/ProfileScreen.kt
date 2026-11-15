@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
@@ -42,7 +43,8 @@ private val ProfileDanger = Color(0xFFD32F2F)
 fun ProfileScreen(
     onMyReservationsClick: () -> Unit,
     onLogout: () -> Unit,
-    onTabClick: (String) -> Unit
+    onTabClick: (String) -> Unit,
+    onDeleteAccountClick: () -> Unit = {}
 ) {
     val user = FirebaseAuth.getInstance().currentUser
 
@@ -53,6 +55,10 @@ fun ProfileScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
     var editName by remember { mutableStateOf(displayName) }
     var message by remember { mutableStateOf<String?>(null) }
+
+    var showDeleteAccountDialog by remember {
+        mutableStateOf(false)
+    }
 
     val email = user?.email ?: "Email unavailable"
     val initials = displayName.trim()
@@ -226,6 +232,17 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 ProfileOption(
+                    icon = Icons.Default.Delete,
+                    title = "Delete Account",
+                    subtitle = "Permanently delete your SeatSpot account",
+                    isDestructive = true,
+                    onClick = {
+                        showDeleteAccountDialog = true
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+                ProfileOption(
                     icon = Icons.Default.Logout,
                     title = "Logout",
                     subtitle = "Sign out of your account",
@@ -354,6 +371,46 @@ fun ProfileScreen(
             },
             shape = RoundedCornerShape(24.dp),
             containerColor = Color.White
+        )
+    }
+    // DELETE ACCOUNT CONFIRMATION
+    if (showDeleteAccountDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteAccountDialog = false
+            },
+            title = {
+                Text("Delete Account?")
+            },
+            text = {
+                Text(
+                    "This action is permanent. Your account will be deleted, " +
+                            "and all your future reservations, including discussion-room " +
+                            "bookings, will be cancelled. Are you sure you want to continue?"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteAccountDialog = false
+                        onDeleteAccountClick()
+                    }
+                ) {
+                    Text(
+                        "Continue",
+                        color = Color(0xFFD32F2F)
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteAccountDialog = false
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 

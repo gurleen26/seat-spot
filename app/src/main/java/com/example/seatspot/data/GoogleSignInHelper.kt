@@ -13,7 +13,6 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 object GoogleSignInHelper {
-
     suspend fun signIn(context: Context): Boolean {
         val credentialManager = CredentialManager.create(context)
 
@@ -85,5 +84,45 @@ object GoogleSignInHelper {
                     }
                 }
         }
+    }
+
+    suspend fun getFreshGoogleCredential(
+        context: Context
+    ): com.google.firebase.auth.AuthCredential {
+
+        val credentialManager = CredentialManager.create(context)
+
+        val googleOption = GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(false)
+            .setServerClientId(
+                context.getString(R.string.default_web_client_id)
+            )
+            .build()
+
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(googleOption)
+            .build()
+
+        val result = credentialManager.getCredential(
+            context = context,
+            request = request
+        )
+
+        val credential = result.credential
+
+        if (
+            credential !is CustomCredential ||
+            credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+        ) {
+            throw IllegalStateException("Unable to get Google credentials.")
+        }
+
+        val googleIdTokenCredential =
+            GoogleIdTokenCredential.createFrom(credential.data)
+
+        return GoogleAuthProvider.getCredential(
+            googleIdTokenCredential.idToken,
+            null
+        )
     }
 }

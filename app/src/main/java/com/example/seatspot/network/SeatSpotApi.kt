@@ -15,7 +15,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 object SeatSpotApi {
 
-    const val BASE_URL = "https://unclamped-walnut-stipend.ngrok-free.dev"
+    const val BASE_URL = "https://seatspot-backend.onrender.com"
 
     private val client = OkHttpClient()
 
@@ -97,8 +97,6 @@ object SeatSpotApi {
             }
         })
     }
-
-
 
     fun getSeatAvailability(
         idToken: String,
@@ -390,5 +388,48 @@ object SeatSpotApi {
         })
     }
 
+    fun deleteAccount(
+        idToken: String,
+        onResult: (Result<String>) -> Unit
+    ) {
+        val request = Request.Builder()
+            .url("$BASE_URL/api/account")
+            .addHeader("Authorization", "Bearer $idToken")
+            .addHeader("ngrok-skip-browser-warning", "true")
+            .delete()
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+
+            override fun onFailure(call: Call, e: IOException) {
+                Handler(Looper.getMainLooper()).post {
+                    onResult(Result.failure(e))
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use { res ->
+                    val responseBody = res.body?.string().orEmpty()
+
+                    Handler(Looper.getMainLooper()).post {
+                        if (res.isSuccessful) {
+                            onResult(Result.success(responseBody))
+                        } else {
+                            val message = try {
+                                JSONObject(responseBody).optString(
+                                    "message",
+                                    "Unable to delete account."
+                                )
+                            } catch (e: Exception) {
+                                "HTTP ${res.code}: Unable to delete account."
+                            }
+
+                            onResult(Result.failure(Exception(message)))
+                        }
+                    }
+                }
+            }
+        })
+    }
 
 }

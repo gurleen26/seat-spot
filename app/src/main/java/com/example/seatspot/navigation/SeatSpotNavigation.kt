@@ -46,6 +46,7 @@ import java.util.TimeZone
 import com.example.seatspot.ui.components.AiChatSheet
 import com.example.seatspot.data.model.AiOption
 import com.example.seatspot.data.model.AiProposal
+import com.example.seatspot.ui.screens.DeleteAccountScreen
 
 @Composable
 fun SeatSpotNavigation() {
@@ -368,6 +369,25 @@ fun SeatSpotNavigation() {
                 },
                 onTabClick = { route ->
                     navigateToTab(route)
+                },
+                onDeleteAccountClick = {
+                    navController.navigate("delete_account")
+                }
+            )
+        }
+
+        composable("delete_account") {
+            DeleteAccountScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onAccountDeleted = {
+                    navController.navigate("login") {
+                        popUpTo(0) {
+                            inclusive = true
+                        }
+                        launchSingleTop = true
+                    }
                 }
             )
         }

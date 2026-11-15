@@ -63,7 +63,23 @@ class AiBookingViewModel : ViewModel() {
                     return@addOnSuccessListener
                 }
 
-                AiApi.parseBooking(token, trimmed) { result ->
+                val conversationHistory = updatedMessages
+                    .dropLast(2)
+                    .filter { !it.isTyping && it.text.isNotBlank() }
+                    .filterNot {
+                        it.text == AiBookingUiState.WELCOME_MESSAGE.text
+                    }
+                    .takeLast(10)
+                    .map { message ->
+                        val role = if (message.isUser) "user" else "assistant"
+                        role to message.text
+                    }
+
+                AiApi.parseBooking(
+                    idToken = token,
+                    text = trimmed,
+                    history = conversationHistory
+                ) { result ->
                     result.onSuccess { response ->
                         val textMsg = if (response.message.isNotBlank()) {
                             response.message

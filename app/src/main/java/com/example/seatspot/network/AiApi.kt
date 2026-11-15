@@ -14,6 +14,7 @@ import okhttp3.Response
 import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import org.json.JSONArray
 
 object AiApi {
 
@@ -25,10 +26,23 @@ object AiApi {
     fun parseBooking(
         idToken: String,
         text: String,
+        history: List<Pair<String, String>>,
         onResult: (Result<AiBookingResponse>) -> Unit
     ) {
+        val historyJson = JSONArray()
+
+        history.forEach { (role, message) ->
+            historyJson.put(
+                JSONObject().apply {
+                    put("role", role)
+                    put("text", message)
+                }
+            )
+        }
+
         val json = JSONObject().apply {
             put("text", text)
+            put("history", historyJson)
         }
 
         val requestBody = json.toString().toRequestBody(
@@ -56,7 +70,9 @@ object AiApi {
 
                     Handler(Looper.getMainLooper()).post {
                         if (res.isSuccessful) {
-                            val parseResult = AiBookingParser.parseResponse(responseBody)
+                            val parseResult =
+                                AiBookingParser.parseResponse(responseBody)
+
                             if (parseResult.isSuccess) {
                                 onResult(parseResult)
                             } else {
