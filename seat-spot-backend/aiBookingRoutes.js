@@ -597,6 +597,8 @@ module.exports = function registerAiRoutes(
         limiter,
         async (req, res) => {
 
+            const { text } = req.body || {};
+
             // Answers that are the user's problem (not a server error)
             const notUnderstood = (message) =>
                 res.status(200).json({
